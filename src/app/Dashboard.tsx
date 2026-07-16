@@ -3,20 +3,23 @@ import { Link } from "react-router";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer,
+  ResponsiveContainer, Legend,
 } from "recharts";
 import {
   ArrowLeft, Leaf, Waves, AlertTriangle, TrendingUp,
   TrendingDown, Loader2, MapPin, Activity, Calendar,
+  Sliders, Info, RefreshCw,
 } from "lucide-react";
 
+import { useTheme } from "next-themes";
 import { ThemeToggle } from "./components/ThemeToggle";
+import modelData from "./model_data.json";
 
-const RAW_CSV_BASE = "https://raw.githubusercontent.com/Cipre-Holding/sargazo/master";
+const RAW_CSV_BASE = "";
 const MONTH_NAMES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 async function fetchCSV(filename: string): Promise<Record<string, string>[]> {
-  const res = await fetch(`${RAW_CSV_BASE}/${filename}`);
+  const res = await fetch(`/${filename}`);
   const text = await res.text();
   const lines = text.trim().split("\n");
   const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, ""));
@@ -152,6 +155,11 @@ const tooltipStyle = {
 };
 
 export default function Dashboard() {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme !== "light";
+  const [activeTab, setActiveTab] = useState<"real" | "predictive">("real");
+
+  // Real-time Data tab states
   const [annualData, setAnnualData] = useState<{ year: string; biomasa: number }[]>([]);
   const [allRows, setAllRows] = useState<Record<string, string>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -161,6 +169,107 @@ export default function Dashboard() {
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   const [geoFeatures, setGeoFeatures] = useState<GeoFeature[]>([]);
   const [geoLoading, setGeoLoading] = useState(true);
+
+  // States for interactive cross-component chart filtering
+  const [selectedProvinceFilter, setSelectedProvinceFilter] = useState<string | null>(null);
+  const [selectedBeachFilter, setSelectedBeachFilter] = useState<string | null>(null);
+
+  // Predictive simulator tab states
+  const [selectedBeach, setSelectedBeach] = useState<string>("Punta Cana");
+  const [isManualMode, setIsManualMode] = useState<boolean>(false);
+  const [po4, setPo4] = useState<number>(modelData.feature_stats.po4.mean);
+  const [uo, setUo] = useState<number>(modelData.feature_stats.uo.mean);
+  const [sstAnomaly, setSstAnomaly] = useState<number>(modelData.feature_stats.sst_anomaly.mean);
+
+  // Pre-calculate preset beach predictions to color pins on the simulator map
+  const beachPredictions = useMemo(() => {
+    const { model, playas, thresholds } = modelData;
+    const preds: Record<string, { nfai: number; risk: { label: string; color: string; bg: string; code: string; pinColor: string } }> = {};
+    
+    Object.entries(playas).forEach(([name, beach]: [string, any]) => {
+      if (beach) {
+        const nfai = model.const + (beach.po4 * model.po4) + (beach.uo * model.uo) + (beach.sst_anomaly * model.sst_anomaly);
+        let risk;
+        if (nfai > thresholds.p80) {
+          risk = { label: "ALTO", color: "text-red-500", bg: "bg-red-500/20 text-red-400", code: "high", pinColor: "#ef4444" };
+        } else if (nfai > thresholds.p50) {
+          risk = { label: "MODERADO", color: "text-amber-500", bg: "bg-yellow-500/20 text-yellow-400", code: "mid", pinColor: "#eab308" };
+        } else {
+          risk = { label: "BAJO", color: "text-emerald-500", bg: "bg-green-500/20 text-green-400", code: "low", pinColor: "#22c55e" };
+        }
+        preds[name] = { nfai, risk };
+      }
+    });
+    return preds;
+  }, []);
+
+  // Sync beach presets in simulator
+  useEffect(() => {
+    if (selectedBeach && !isManualMode) {
+      const beachData = (modelData.playas as Record<string, any>)[selectedBeach];
+      if (beachData) {
+        setPo4(beachData.po4);
+        setUo(beachData.uo);
+        setSstAnomaly(beachData.sst_anomaly);
+      }
+    }
+  }, [selectedBeach, isManualMode]);
+
+  // Handle manual adjustments
+  const handleSliderChange = (type: "po4" | "uo" | "sst", val: number) => {
+    setIsManualMode(true);
+    if (type === "po4") setPo4(val);
+    else if (type === "uo") setUo(val);
+    else if (type === "sst") setSstAnomaly(val);
+  };
+
+  // Live model calculation
+  const predictedNfai = useMemo(() => {
+    const { model } = modelData;
+    return model.const + (po4 * model.po4) + (uo * model.uo) + (sstAnomaly * model.sst_anomaly);
+  }, [po4, uo, sstAnomaly]);
+
+  // Live risk level assessment
+  const riskLevel = useMemo(() => {
+    const { thresholds } = modelData;
+    if (predictedNfai > thresholds.p80) {
+      return { label: "ALTO", color: "text-red-500", bg: "bg-red-500/10 border-red-500/20", code: "high", pinColor: "#ef4444" };
+    } else if (predictedNfai > thresholds.p50) {
+      return { label: "MODERADO", color: "text-amber-500", bg: "bg-amber-500/10 border-amber-500/20", code: "mid", pinColor: "#eab308" };
+    } else {
+      return { label: "BAJO", color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/20", code: "low", pinColor: "#22c55e" };
+    }
+  }, [predictedNfai]);
+
+  // Normalized prediction score
+  const normalizedIndex = useMemo(() => {
+    const predictions = modelData.historical.map(h => h.nfai_pred);
+    const minPred = Math.min(...predictions);
+    const maxPred = Math.max(...predictions);
+    const loExt = minPred - 0.03;
+    const hiExt = maxPred + 0.03;
+    const val = (predictedNfai - loExt) / (hiExt - loExt);
+    return Math.max(0, Math.min(100, val * 100));
+  }, [predictedNfai]);
+
+  // Contributions list
+  const contributions = useMemo(() => {
+    const { model } = modelData;
+    return [
+      { name: "Constante (Base)", value: model.const },
+      { name: "Fosfato (PO₄)", value: model.po4 * po4 },
+      { name: "Corriente (Uo)", value: model.uo * uo },
+      { name: "Anomalía de SST", value: model.sst_anomaly * sstAnomaly },
+    ];
+  }, [po4, uo, sstAnomaly]);
+
+  // Reset to default OLS stats
+  const resetToHistory = () => {
+    setIsManualMode(true);
+    setPo4(modelData.feature_stats.po4.mean);
+    setUo(modelData.feature_stats.uo.mean);
+    setSstAnomaly(modelData.feature_stats.sst_anomaly.mean);
+  };
 
   useEffect(() => {
     fetch(GEOJSON_URL)
@@ -214,10 +323,61 @@ export default function Dashboard() {
     }));
   }, [allRows]);
 
-  // KPI values
-  const latestYear = annualData[annualData.length - 1];
-  const prevYear = annualData[annualData.length - 2];
-  const peakYear = annualData.reduce((p, c) => (c.biomasa > p.biomasa ? c : p), { year: "-", biomasa: 0 });
+  // Global scale factor calculation based on selected filters
+  const activeFilterInfo = useMemo(() => {
+    if (selectedProvinceFilter) {
+      const prov = PROVINCE_DATA.find(p => p.id === selectedProvinceFilter);
+      if (prov) {
+        const totalImpact = PROVINCE_DATA.reduce((s, p) => s + p.impact, 0);
+        const scale = prov.impact / totalImpact;
+        return {
+          scale,
+          label: `Provincia: ${prov.name}`,
+          type: "province",
+          name: prov.name
+        };
+      }
+    } else if (selectedBeachFilter) {
+      const beach = DR_BEACHES.find(b => b.id === selectedBeachFilter);
+      if (beach) {
+        const scale = (beach.level / 5) * 0.03; // Beach represents a fraction of regional biomass
+        return {
+          scale,
+          label: `Playa: ${beach.name}`,
+          type: "beach",
+          name: beach.name
+        };
+      }
+    }
+    return { scale: 1.0, label: "Todo el Caribe (Total)", type: "global", name: "Caribe" };
+  }, [selectedProvinceFilter, selectedBeachFilter]);
+
+  // Scaled data sets to feed Recharts dynamically
+  const scaledAnnualData = useMemo(() => {
+    return annualData.map(d => ({
+      ...d,
+      biomasa: parseFloat((d.biomasa * activeFilterInfo.scale).toFixed(2))
+    }));
+  }, [annualData, activeFilterInfo.scale]);
+
+  const scaledSeasonalData = useMemo(() => {
+    return seasonalData.map(d => ({
+      ...d,
+      biomasa: parseFloat((d.biomasa * activeFilterInfo.scale).toFixed(3))
+    }));
+  }, [seasonalData, activeFilterInfo.scale]);
+
+  const scaledRecentData = useMemo(() => {
+    return recentData.map(d => ({
+      ...d,
+      biomasa: parseFloat((d.biomasa * activeFilterInfo.scale).toFixed(3))
+    }));
+  }, [recentData, activeFilterInfo.scale]);
+
+  // KPI values using scaled data
+  const latestYear = scaledAnnualData[scaledAnnualData.length - 1];
+  const prevYear = scaledAnnualData[scaledAnnualData.length - 2];
+  const peakYear = scaledAnnualData.reduce((p, c) => (c.biomasa > p.biomasa ? c : p), { year: "-", biomasa: 0 });
   const yoyChange = latestYear && prevYear ? ((latestYear.biomasa - prevYear.biomasa) / prevYear.biomasa * 100).toFixed(1) : null;
   const alertProvinces = PROVINCE_DATA.filter(p => p.level >= 4).length;
 
@@ -242,11 +402,11 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1.5 text-xs font-mono text-accent border border-accent/30 px-2.5 py-1 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-              Datos en vivo
+              Datos Históricos
             </span>
             {!loading && (
               <span className="text-xs text-muted-foreground font-mono hidden md:block">
-                {annualData.length} años cargados
+                {activeTab === "real" ? `${annualData.length} años cargados` : `${modelData.metrics.n_obs} observaciones`}
               </span>
             )}
             <div className="border-l border-border pl-3 flex items-center">
@@ -261,22 +421,79 @@ export default function Dashboard() {
         {/* PAGE TITLE */}
         <div>
           <h1 className="font-display text-3xl md:text-4xl font-bold mb-1">Panel de Monitoreo del Sargazo</h1>
-          <p className="text-muted-foreground text-sm">República Dominicana · Datos satelitales del Atlántico Caribe · Fuente: <a href="https://github.com/Cipre-Holding/sargazo" target="_blank" rel="noreferrer" className="text-primary hover:underline underline-offset-2">Cipre-Holding/sargazo</a></p>
+          <p className="text-muted-foreground text-sm">República Dominicana · Datos satelitales y modelado predictivo del Atlántico</p>
         </div>
 
-        {/* KPI CARDS */}
+        {/* TAB SWITCHER */}
+        <div className="flex gap-2 border-b border-border pb-px">
+          <button
+            onClick={() => setActiveTab("real")}
+            className={`px-5 py-3 border-b-2 text-sm font-semibold transition-all ${
+              activeTab === "real"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Panel Histórico
+          </button>
+          <button
+            onClick={() => setActiveTab("predictive")}
+            className={`px-5 py-3 border-b-2 text-sm font-semibold transition-all flex items-center gap-2 ${
+              activeTab === "predictive"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Sliders className="w-4 h-4" />
+            Simulador de Sargazo (Modelo Predictivo)
+          </button>
+        </div>
+
+        {/* CONDITIONAL CONTENT */}
         {loading ? (
-          <div className="flex items-center justify-center h-32 text-muted-foreground gap-3">
+          <div className="flex items-center justify-center h-64 text-muted-foreground gap-3">
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
             <span className="text-sm font-mono">Cargando datos desde GitHub…</span>
           </div>
         ) : error ? (
-          <div className="flex items-center justify-center h-32 text-muted-foreground gap-3">
+          <div className="flex items-center justify-center h-64 text-muted-foreground gap-3">
             <AlertTriangle className="w-6 h-6 text-amber-400" />
             <span className="text-sm">No se pudo cargar el dataset.</span>
           </div>
-        ) : (
+        ) : activeTab === "real" ? (
           <>
+            {/* ACTIVE FILTER BANNER */}
+            {activeFilterInfo.type !== "global" && (
+              <div className="bg-primary/10 border border-primary/20 rounded-2xl p-4 flex items-center justify-between gap-4 animate-fade-in">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary">
+                    <MapPin className="w-4.5 h-4.5 animate-bounce" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono uppercase text-muted-foreground">Filtro de Mapa Activo</span>
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Estimación local para: <strong className="text-primary">{activeFilterInfo.name}</strong> 
+                      <span className="text-xs font-normal text-muted-foreground ml-2">
+                        (Aporte proporcional estimado: {(activeFilterInfo.scale * 100).toFixed(2)}% de la biomasa total)
+                      </span>
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setSelectedProvinceFilter(null);
+                    setSelectedBeachFilter(null);
+                  }}
+                  className="text-xs bg-background hover:bg-muted text-foreground border border-border px-3 py-1.5 rounded-xl transition-colors font-medium flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Restablecer al Caribe (Ver Total)
+                </button>
+              </div>
+            )}
+
+            {/* REAL-TIME DATA TAB */}
+            {/* KPI CARDS */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 {
@@ -326,15 +543,14 @@ export default function Dashboard() {
 
             {/* CHARTS ROW */}
             <div className="grid lg:grid-cols-2 gap-6">
-
               {/* Annual area chart */}
               <div className="bg-card border border-border rounded-2xl p-6">
                 <div className="mb-6">
-                  <h2 className="font-display text-lg font-bold">Biomasa anual — Caribe</h2>
+                  <h2 className="font-display text-lg font-bold">Biomasa anual — {activeFilterInfo.name}</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">Millones de toneladas acumuladas por año (2012–2026)</p>
                 </div>
                 <ResponsiveContainer width="100%" height={260}>
-                  <AreaChart data={annualData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                  <AreaChart data={scaledAnnualData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                     <XAxis dataKey="year" tick={{ fill: "var(--color-muted-foreground)", fontSize: 11, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fill: "var(--color-muted-foreground)", fontSize: 11, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} tickFormatter={v => `${v} Mt`} width={52} />
@@ -347,11 +563,11 @@ export default function Dashboard() {
               {/* Seasonal pattern */}
               <div className="bg-card border border-border rounded-2xl p-6">
                 <div className="mb-6">
-                  <h2 className="font-display text-lg font-bold">Patrón estacional promedio</h2>
+                  <h2 className="font-display text-lg font-bold">Patrón estacional promedio — {activeFilterInfo.name}</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">Biomasa mensual promedio histórico (2012–2026)</p>
                 </div>
                 <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={seasonalData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                  <BarChart data={scaledSeasonalData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
                     <XAxis dataKey="mes" tick={{ fill: "var(--color-muted-foreground)", fontSize: 11, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fill: "var(--color-muted-foreground)", fontSize: 11, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} tickFormatter={v => `${v} Mt`} width={52} />
@@ -361,22 +577,20 @@ export default function Dashboard() {
                 </ResponsiveContainer>
                 <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
                   <span className="inline-block w-4 border-b-2 border-dashed border-accent" />
-                  Promedio anual: {seasonalData.length ? (seasonalData.reduce((s, d) => s + d.biomasa, 0) / 12).toFixed(3) : "—"} Mt
+                  Promedio anual: {scaledSeasonalData.length ? (scaledSeasonalData.reduce((s, d) => s + d.biomasa, 0) / 12).toFixed(3) : "—"} Mt
                 </p>
               </div>
             </div>
 
             {/* MAP + PROVINCE TABLE */}
             <div className="grid lg:grid-cols-5 gap-6">
-
               {/* DR MAP */}
               <div className="lg:col-span-3 bg-card border border-border rounded-2xl p-6">
                 <div className="mb-5">
                   <h2 className="font-display text-lg font-bold">Mapa de Impacto — República Dominicana</h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">Nivel de acumulación de sargazo por provincia costera · 2024</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Haz clic en una provincia o playa para filtrar los gráficos temporales</p>
                 </div>
 
-                {/* Legend */}
                 <div className="flex flex-wrap gap-x-4 gap-y-2 mb-4">
                   <div className="flex flex-wrap gap-3">
                     {[5,4,3,2,1].map(lvl => (
@@ -398,44 +612,55 @@ export default function Dashboard() {
                   <svg
                     viewBox="0 0 480 340"
                     className="absolute inset-0 w-full h-full"
-                    style={{ background: "#061c2e" }}
+                    style={{ background: isDark ? "#061c2e" : "#d5e6e8" }}
                     onMouseLeave={() => { setHoveredProvince(null); setMousePos(null); }}
                   >
                     <defs>
                       <radialGradient id="oceanGrad" cx="50%" cy="50%" r="70%">
-                        <stop offset="0%" stopColor="#0d2b3e" stopOpacity={1} />
-                        <stop offset="100%" stopColor="#061c2e" stopOpacity={1} />
+                        <stop offset="0%" stopColor={isDark ? "#0d2b3e" : "#eaf4f5"} stopOpacity={1} />
+                        <stop offset="100%" stopColor={isDark ? "#061c2e" : "#d5e6e8"} stopOpacity={1} />
                       </radialGradient>
                     </defs>
                     <rect width="480" height="340" fill="url(#oceanGrad)" />
 
-                    {/* Haiti — context shape */}
-                    <path d={HAITI_PATH} fill="#0c1e2e" stroke="#1a3a52" strokeWidth={0.6} />
+                    <path d={HAITI_PATH} fill={isDark ? "#0c1e2e" : "#b8c4c7"} stroke={isDark ? "#1a3a52" : "#9caeb3"} strokeWidth={0.6} />
 
-                    {/* Loading state */}
                     {geoLoading && (
-                      <text x="240" y="175" textAnchor="middle" fill="#6fa9a0" fontSize={11} fontFamily="DM Mono">
+                      <text x="240" y="175" textAnchor="middle" fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={11} fontFamily="DM Mono">
                         Cargando provincias…
                       </text>
                     )}
 
-                    {/* Province polygons from real GeoJSON */}
                     {!geoLoading && geoFeatures.map((feature, idx) => {
                       const geoName = feature.properties.province_name;
                       const id = GEO_NAME_MAP[geoName] ?? null;
                       const pData = id ? PROVINCE_DATA.find(p => p.id === id) : null;
                       const level = pData?.level ?? 0;
-                      const baseColor = level > 0 ? LEVEL_COLORS[level] : "#1d5c72";
+                      const baseColor = level > 0 ? LEVEL_COLORS[level] : (isDark ? "#1d5c72" : "#b0bfc2");
+                      
+                      const isSelected = selectedProvinceFilter === id;
                       const isHovered = hoveredProvince === (id ?? geoName);
+                      const isHighlighted = isHovered || isSelected;
+                      
                       const pathStr = featureToPath(feature.geometry);
                       return (
                         <path
                           key={`${geoName}-${idx}`}
                           d={pathStr}
-                          fill={isHovered ? baseColor : baseColor + (level > 0 ? "70" : "55")}
-                          stroke={isHovered ? baseColor : "#1a4a5a"}
-                          strokeWidth={isHovered ? 1.2 : 0.4}
+                          fill={isHighlighted ? baseColor : baseColor + (level > 0 ? "70" : "55")}
+                          stroke={isHighlighted ? baseColor : (isDark ? "#1a4a5a" : "#f4f1ea")}
+                          strokeWidth={isHighlighted ? 1.2 : 0.4}
                           style={{ cursor: "pointer", transition: "fill 0.12s" }}
+                          onClick={() => {
+                            if (id) {
+                              if (selectedProvinceFilter === id) {
+                                setSelectedProvinceFilter(null); // Click toggles off
+                              } else {
+                                setSelectedProvinceFilter(id);
+                                setSelectedBeachFilter(null);
+                              }
+                            }
+                          }}
                           onMouseEnter={(e) => {
                             setHoveredProvince(id ?? geoName);
                             const svgEl = (e.currentTarget as SVGPathElement).closest("svg")!;
@@ -458,16 +683,19 @@ export default function Dashboard() {
                       );
                     })}
 
-                    {/* Province borders overlay for visual clarity */}
                     {!geoLoading && geoFeatures.map((feature, idx) => {
                       const geoName = feature.properties.province_name;
                       const id = GEO_NAME_MAP[geoName] ?? null;
+                      
+                      const isSelected = selectedProvinceFilter === id;
                       const isHovered = hoveredProvince === (id ?? geoName);
-                      if (!isHovered) return null;
+                      const isHighlighted = isHovered || isSelected;
+                      
+                      if (!isHighlighted) return null;
                       const pathStr = featureToPath(feature.geometry);
                       const pData = id ? PROVINCE_DATA.find(p => p.id === id) : null;
                       const level = pData?.level ?? 0;
-                      const color = level > 0 ? LEVEL_COLORS[level] : "#1d8c7a";
+                      const color = level > 0 ? LEVEL_COLORS[level] : (isDark ? "#1d8c7a" : "#dfdad0");
                       return (
                         <path key={`h-${geoName}-${idx}`} d={pathStr}
                           fill="none" stroke={color} strokeWidth={2}
@@ -476,13 +704,23 @@ export default function Dashboard() {
                       );
                     })}
 
-                    {/* Beach alert markers */}
                     {DR_BEACHES.map(beach => {
                       const [bx, by] = lonLatToXY(beach.lon, beach.lat);
                       const color = LEVEL_COLORS[beach.level];
+                      
                       const isH = hoveredBeach === beach.id;
+                      const isSelected = selectedBeachFilter === beach.id;
+                      
                       return (
                         <g key={beach.id} style={{ cursor: "pointer" }}
+                          onClick={() => {
+                            if (selectedBeachFilter === beach.id) {
+                              setSelectedBeachFilter(null);
+                            } else {
+                              setSelectedBeachFilter(beach.id);
+                              setSelectedProvinceFilter(null);
+                            }
+                          }}
                           onMouseEnter={(e) => {
                             setHoveredBeach(beach.id);
                             setHoveredProvince(null);
@@ -497,21 +735,16 @@ export default function Dashboard() {
                           }}
                           onMouseLeave={() => { setHoveredBeach(null); setMousePos(null); }}
                         >
-                          {/* Pulse ring for high-alert beaches */}
-                          {beach.level >= 4 && (
-                            <circle cx={bx} cy={by} r={isH ? 11 : 9} fill={color} opacity={isH ? 0.25 : 0.12} />
+                          {(beach.level >= 4 || isSelected || isH) && (
+                            <circle cx={bx} cy={by} r={isSelected ? 14 : isH ? 11 : 9} fill={color} opacity={isSelected ? 0.35 : isH ? 0.25 : 0.12} className={isSelected ? "animate-pulse" : ""} />
                           )}
-                          {/* Pin stem */}
-                          <line x1={bx} y1={by + 3} x2={bx} y2={by + 8} stroke={color} strokeWidth={1.2} opacity={0.8} />
-                          {/* Pin head */}
-                          <circle cx={bx} cy={by} r={isH ? 5 : 3.5} fill={color} stroke="#061c2e" strokeWidth={1} opacity={isH ? 1 : 0.85} />
-                          {/* White dot center */}
-                          <circle cx={bx} cy={by} r={1.2} fill="#061c2e" opacity={0.6} />
+                          <line x1={bx} y1={by + 3} x2={bx} y2={by + 8} stroke={color} strokeWidth={isSelected ? 1.8 : 1.2} opacity={0.8} />
+                          <circle cx={bx} cy={by} r={isSelected ? 5.5 : isH ? 5 : 3.5} fill={color} stroke={isDark ? "#061c2e" : "#ffffff"} strokeWidth={1} opacity={isSelected || isH ? 1 : 0.85} />
+                          <circle cx={bx} cy={by} r={1.2} fill={isDark ? "#061c2e" : "#ffffff"} opacity={0.6} />
                         </g>
                       );
                     })}
 
-                    {/* Tooltip — beach or province */}
                     {(hoveredBeach || hoveredProvince) && mousePos && (() => {
                       const beach = hoveredBeach ? DR_BEACHES.find(b => b.id === hoveredBeach) : null;
                       const pData = !beach ? PROVINCE_DATA.find(p => p.id === hoveredProvince) : null;
@@ -531,23 +764,22 @@ export default function Dashboard() {
                       return (
                         <g style={{ pointerEvents: "none" }}>
                           <rect x={tx} y={ty} width={tw} height={th} rx={7}
-                            fill="#061c2e" stroke={color} strokeWidth={0.9} opacity={0.97} />
-                          {/* Type badge */}
+                            fill={isDark ? "#061c2e" : "#ffffff"} stroke={color} strokeWidth={0.9} opacity={0.97} />
                           <rect x={tx + 8} y={ty + 6} width={isBeach ? 34 : 46} height={12} rx={3}
                             fill={color} opacity={0.2} />
                           <text x={tx + 12} y={ty + 15} fill={color} fontSize={8} fontFamily="DM Mono" fontWeight={600}>
                             {isBeach ? "PLAYA" : "PROVINCIA"}
                           </text>
-                          {/* Name */}
-                          <text x={tx + 8} y={ty + 30} fill="#dff0eb" fontSize={10} fontFamily="DM Sans" fontWeight={600}>
+                          <text x={tx + 8} y={ty + 30} fill={isDark ? "#dff0eb" : "#0f172a"} fontSize={10} fontFamily="DM Sans" fontWeight={600}>
                             {displayName}
                           </text>
-                          {/* Detail row */}
+                          {isBeach && beach && (
+                            <text x={tx + 8} y={ty + 43} fill={isDark ? "#6fa9a0" : "#475569"} fontSize={9} fontFamily="DM Mono">
+                              Alerta de sargazo activa
+                            </text>
+                          )}
                           {isBeach && beach && (
                             <>
-                              <text x={tx + 8} y={ty + 43} fill="#6fa9a0" fontSize={9} fontFamily="DM Mono">
-                                Alerta de sargazo activa
-                              </text>
                               <circle cx={tx + 10} cy={ty + 52} r={3.5} fill={color} opacity={0.85} />
                               <text x={tx + 18} y={ty + 55} fill={color} fontSize={8.5} fontFamily="DM Mono">
                                 {LEVEL_LABELS[level]} · Nivel {level}/5
@@ -556,7 +788,7 @@ export default function Dashboard() {
                           )}
                           {!isBeach && pData && (
                             <>
-                              <text x={tx + 8} y={ty + 43} fill="#6fa9a0" fontSize={9} fontFamily="DM Mono">
+                              <text x={tx + 8} y={ty + 43} fill={isDark ? "#6fa9a0" : "#475569"} fontSize={9} fontFamily="DM Mono">
                                 {pData.impact},000 ton acumuladas
                               </text>
                               <circle cx={tx + 10} cy={ty + 52} r={3.5} fill={color} opacity={0.85} />
@@ -566,15 +798,14 @@ export default function Dashboard() {
                             </>
                           )}
                           {!isBeach && !pData && (
-                            <text x={tx + 8} y={ty + 43} fill="#6fa9a0" fontSize={9} fontFamily="DM Mono">Sin datos de impacto</text>
+                            <text x={tx + 8} y={ty + 43} fill={isDark ? "#6fa9a0" : "#475569"} fontSize={9} fontFamily="DM Mono">Sin datos de impacto</text>
                           )}
                         </g>
                       );
                     })()}
 
-                    {/* Labels */}
-                    <text x={240} y={333} textAnchor="middle" fill="#6fa9a0" fontSize={7} fontFamily="DM Mono" opacity={0.45}>República Dominicana</text>
-                    <text x={16} y={195} textAnchor="middle" fill="#6fa9a0" fontSize={7} fontFamily="DM Mono" opacity={0.35} transform="rotate(-90,16,195)">Haití</text>
+                    <text x={240} y={333} textAnchor="middle" fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={7} fontFamily="DM Mono" opacity={0.45}>República Dominicana</text>
+                    <text x={16} y={195} textAnchor="middle" fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={7} fontFamily="DM Mono" opacity={0.35} transform="rotate(-90,16,195)">Haití</text>
                   </svg>
                 </div>
               </div>
@@ -583,13 +814,27 @@ export default function Dashboard() {
               <div className="lg:col-span-2 bg-card border border-border rounded-2xl p-6">
                 <div className="mb-5">
                   <h2 className="font-display text-lg font-bold">Ranking de Provincias</h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">Acumulación 2024 (miles de toneladas)</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Haz clic en una provincia para aislar su tendencia</p>
                 </div>
                 <div className="space-y-2 overflow-y-auto max-h-[420px] pr-1" style={{ scrollbarWidth: "none" }}>
                   {[...PROVINCE_DATA].sort((a, b) => b.impact - a.impact).map((p, i) => (
                     <div
                       key={p.id}
-                      className={`flex items-center gap-3 p-3 rounded-xl transition-colors cursor-default ${hoveredProvince === p.id ? "bg-primary/10" : "hover:bg-background/60"}`}
+                      className={`flex items-center gap-3 p-3 rounded-xl transition-colors cursor-pointer ${
+                        selectedProvinceFilter === p.id 
+                          ? "bg-primary/20 border border-primary/30" 
+                          : hoveredProvince === p.id 
+                            ? "bg-primary/10" 
+                            : "hover:bg-background/60"
+                      }`}
+                      onClick={() => {
+                        if (selectedProvinceFilter === p.id) {
+                          setSelectedProvinceFilter(null);
+                        } else {
+                          setSelectedProvinceFilter(p.id);
+                          setSelectedBeachFilter(null);
+                        }
+                      }}
                       onMouseEnter={() => setHoveredProvince(p.id)}
                       onMouseLeave={() => setHoveredProvince(null)}
                     >
@@ -617,13 +862,13 @@ export default function Dashboard() {
             <div className="bg-card border border-border rounded-2xl p-6">
               <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
                 <div>
-                  <h2 className="font-display text-lg font-bold">Tendencia reciente — últimos 24 meses</h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">Biomasa mensual en millones de toneladas métricas (Mt)</p>
+                  <h2 className="font-display text-lg font-bold">Tendencia reciente — {activeFilterInfo.name}</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">Biomasa mensual en millones de toneladas métricas (Mt) (Últimos 24 meses)</p>
                 </div>
-                <span className="text-xs font-mono text-accent border border-accent/30 px-2.5 py-1 rounded-full">{recentData.length} puntos · datos reales</span>
+                <span className="text-xs font-mono text-accent border border-accent/30 px-2.5 py-1 rounded-full">{scaledRecentData.length} puntos · datos reales</span>
               </div>
               <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={recentData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                <LineChart data={scaledRecentData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis dataKey="label" tick={{ fill: "var(--color-muted-foreground)", fontSize: 10, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} interval={3} angle={-20} textAnchor="end" height={36} />
                   <YAxis tick={{ fill: "var(--color-muted-foreground)", fontSize: 11, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} tickFormatter={v => `${v} Mt`} width={52} />
@@ -632,7 +877,541 @@ export default function Dashboard() {
                 </LineChart>
               </ResponsiveContainer>
             </div>
+          </>
+        ) : (
+          <>
+            {/* PREDICTIVE MODEL SIMULATOR TAB */}
+            <div className="space-y-8">
+              
+              {/* SIMULATOR CONTROLS AND RESULTS ROW */}
+              <div className="grid lg:grid-cols-5 gap-6">
 
+                {/* CONTROLS COLUMN (2/5 size) */}
+                <div className="lg:col-span-2 bg-card border border-border rounded-2xl p-6 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Sliders className="w-5 h-5 text-accent" />
+                      <h2 className="font-display text-lg font-bold text-foreground">Controles del Modelo</h2>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-6">
+                      Ajusta las variables predictoras o selecciona una playa costera de referencia (en el selector o haciendo clic en el mapa) para analizar el sargazo.
+                    </p>
+
+                    <div className="space-y-5">
+                      {/* Beach Selector Preset */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-xs font-mono uppercase text-muted-foreground">Playa de análisis</label>
+                          {isManualMode && (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-mono text-accent bg-accent/10 border border-accent/20 px-2 py-0.5 rounded-full animate-pulse">
+                              🧪 Modificado
+                            </span>
+                          )}
+                        </div>
+                        <select
+                          value={selectedBeach}
+                          onChange={(e) => {
+                            setSelectedBeach(e.target.value);
+                            setIsManualMode(false);
+                          }}
+                          className="w-full bg-background border border-border text-foreground px-3 py-2.5 rounded-xl text-sm outline-none focus:border-primary transition-colors font-semibold"
+                        >
+                          {Object.keys(modelData.playas).map((beach) => (
+                            <option key={beach} value={beach}>📍 {beach}</option>
+                          ))}
+                        </select>
+                        {!isManualMode ? (
+                          <span className="text-[10px] text-muted-foreground mt-1.5 block">
+                            Cargados datos de referencia de {modelData.playas_ref_date} para esta playa.
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setIsManualMode(false)}
+                            className="text-[10px] text-primary hover:underline mt-1.5 block font-medium"
+                          >
+                            Revertir a valores de referencia
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="border-t border-border/60 my-4" />
+
+                      {/* PO4 (Phosphate) Slider */}
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-semibold text-foreground flex items-center gap-1">
+                            Fosfato (PO₄) 
+                            <span className="text-[10px] font-mono text-muted-foreground">({modelData.feature_stats.po4.unit})</span>
+                          </span>
+                          <span className="text-xs font-mono font-bold bg-background px-2 py-0.5 rounded border border-border text-foreground">
+                            {po4.toFixed(4)}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.0005"
+                          max="0.0280"
+                          step="0.0002"
+                          value={po4}
+                          onChange={(e) => handleSliderChange("po4", parseFloat(e.target.value))}
+                          className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
+                        />
+                        <div className="flex justify-between text-[9px] font-mono text-muted-foreground mt-1">
+                          <span>Min: 0.0005</span>
+                          <span>Med: {modelData.feature_stats.po4.mean.toFixed(4)}</span>
+                          <span>Max: 0.0280</span>
+                        </div>
+                      </div>
+
+                      {/* Uo (East-West Current) Slider */}
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-semibold text-foreground flex items-center gap-1">
+                            Corriente Este-Oeste (Uo)
+                            <span className="text-[10px] font-mono text-muted-foreground">({modelData.feature_stats.uo.unit})</span>
+                          </span>
+                          <span className="text-xs font-mono font-bold bg-background px-2 py-0.5 rounded border border-border text-foreground">
+                            {uo.toFixed(3)}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-0.200"
+                          max="0.050"
+                          step="0.001"
+                          value={uo}
+                          onChange={(e) => handleSliderChange("uo", parseFloat(e.target.value))}
+                          className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
+                        />
+                        <div className="flex justify-between text-[9px] font-mono text-muted-foreground mt-1">
+                          <span>Oeste: -0.200</span>
+                          <span>Med: {modelData.feature_stats.uo.mean.toFixed(3)}</span>
+                          <span>Este: 0.050</span>
+                        </div>
+                      </div>
+
+                      {/* SST Anomaly Slider */}
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-semibold text-foreground flex items-center gap-1">
+                            Anomalía de SST
+                            <span className="text-[10px] font-mono text-muted-foreground">({modelData.feature_stats.sst_anomaly.unit})</span>
+                          </span>
+                          <span className="text-xs font-mono font-bold bg-background px-2 py-0.5 rounded border border-border text-foreground">
+                            {sstAnomaly.toFixed(2)}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-0.10"
+                          max="1.70"
+                          step="0.01"
+                          value={sstAnomaly}
+                          onChange={(e) => handleSliderChange("sst", parseFloat(e.target.value))}
+                          className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
+                        />
+                        <div className="flex justify-between text-[9px] font-mono text-muted-foreground mt-1">
+                          <span>Frío: -0.10</span>
+                          <span>Med: {modelData.feature_stats.sst_anomaly.mean.toFixed(2)}</span>
+                          <span>Cálido: 1.70</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 pt-4 border-t border-border/60">
+                    <button
+                      onClick={resetToHistory}
+                      className="w-full flex items-center justify-center gap-2 border border-border hover:bg-background/80 text-foreground px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Restablecer a promedio histórico
+                    </button>
+                  </div>
+                </div>
+
+                {/* RESULT & MAP COLUMN (3/5 size) */}
+                <div className="lg:col-span-3 space-y-6 flex flex-col justify-between">
+                  
+                  {/* SVG MAP with Beach Pins */}
+                  <div className="bg-card border border-border rounded-2xl p-6 relative">
+                    <div className="absolute top-6 left-6 z-10">
+                      <h2 className="font-display text-sm font-bold text-foreground">Distribución Geográfica de Playas</h2>
+                      <p className="text-[10px] text-muted-foreground">El pin seleccionado reacciona en tiempo real a los sliders</p>
+                    </div>
+
+                    <div className="relative w-full" style={{ paddingBottom: "70.83%" }}>
+                      <svg
+                        viewBox="0 0 480 340"
+                        className="absolute inset-0 w-full h-full rounded-xl"
+                        style={{ background: isDark ? "#061c2e" : "#d5e6e8" }}
+                        onMouseLeave={() => { setHoveredProvince(null); setMousePos(null); }}
+                      >
+                        <defs>
+                          <radialGradient id="oceanGradSim" cx="50%" cy="50%" r="70%">
+                            <stop offset="0%" stopColor={isDark ? "#0d2b3e" : "#eaf4f5"} stopOpacity={1} />
+                            <stop offset="100%" stopColor={isDark ? "#061c2e" : "#d5e6e8"} stopOpacity={1} />
+                          </radialGradient>
+                        </defs>
+                        <rect width="480" height="340" fill="url(#oceanGradSim)" />
+
+                        <path d={HAITI_PATH} fill={isDark ? "#0c1e2e" : "#b8c4c7"} stroke={isDark ? "#1a3a52" : "#9caeb3"} strokeWidth={0.6} />
+
+                        {geoLoading && (
+                          <text x="240" y="175" textAnchor="middle" fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={11} fontFamily="DM Mono">
+                            Cargando mapa…
+                          </text>
+                        )}
+
+                        {!geoLoading && geoFeatures.map((feature, idx) => {
+                          const geoName = feature.properties.province_name;
+                          const id = GEO_NAME_MAP[geoName] ?? null;
+                          const pData = id ? PROVINCE_DATA.find(p => p.id === id) : null;
+                          const level = pData?.level ?? 0;
+                          const baseColor = level > 0 ? LEVEL_COLORS[level] : (isDark ? "#1d5c72" : "#b0bfc2");
+                          const isHovered = hoveredProvince === (id ?? geoName);
+                          const pathStr = featureToPath(feature.geometry);
+                          return (
+                            <path
+                              key={`sim-${geoName}-${idx}`}
+                              d={pathStr}
+                              fill={isHovered ? baseColor : baseColor + (level > 0 ? "55" : "40")}
+                              stroke={isDark ? "#1a4a5a" : "#f4f1ea"}
+                              strokeWidth={0.4}
+                              style={{ transition: "fill 0.12s" }}
+                            />
+                          );
+                        })}
+
+                        {/* Interactive beach pins on the map */}
+                        {Object.entries(modelData.playas).map(([name, beach]: [string, any]) => {
+                          if (!beach) return null;
+                          const [bx, by] = lonLatToXY(beach.lon, beach.lat);
+                          const isSelected = selectedBeach === name;
+                          
+                          // Determine the color of this pin
+                          let pinColor;
+                          if (isSelected) {
+                            pinColor = riskLevel.pinColor;
+                          } else {
+                            const predInfo = beachPredictions[name];
+                            pinColor = predInfo ? predInfo.risk.pinColor : "#6fa9a0";
+                          }
+                          
+                          const isH = hoveredBeach === name;
+                          
+                          return (
+                            <g 
+                              key={`pin-${name}`} 
+                              style={{ cursor: "pointer" }}
+                              onClick={() => {
+                                setSelectedBeach(name);
+                                setIsManualMode(false);
+                              }}
+                              onMouseEnter={(e) => {
+                                setHoveredBeach(name);
+                                setHoveredProvince(null);
+                                const svgEl = (e.currentTarget as SVGGElement).closest("svg")!;
+                                const r = svgEl.getBoundingClientRect();
+                                setMousePos({ x: (e.clientX - r.left) / r.width * 480, y: (e.clientY - r.top) / r.height * 340 });
+                              }}
+                              onMouseMove={(e) => {
+                                const svgEl = (e.currentTarget as SVGGElement).closest("svg")!;
+                                const r = svgEl.getBoundingClientRect();
+                                setMousePos({ x: (e.clientX - r.left) / r.width * 480, y: (e.clientY - r.top) / r.height * 340 });
+                              }}
+                              onMouseLeave={() => { setHoveredBeach(null); setMousePos(null); }}
+                            >
+                              {/* Pulse ring for selected beach */}
+                              {isSelected && (
+                                <circle cx={bx} cy={by} r={14} fill={pinColor} opacity={0.35} className="animate-pulse" />
+                              )}
+                              {/* Hover ring */}
+                              {isH && !isSelected && (
+                                <circle cx={bx} cy={by} r={10} fill={pinColor} opacity={0.2} />
+                              )}
+                              {/* Pin stem */}
+                              <line x1={bx} y1={by + 3} x2={bx} y2={by + 8} stroke={pinColor} strokeWidth={isSelected ? 1.8 : 1.2} opacity={0.8} />
+                              {/* Pin head */}
+                              <circle cx={bx} cy={by} r={isSelected ? 6 : 4} fill={pinColor} stroke={isDark ? "#061c2e" : "#ffffff"} strokeWidth={1} />
+                            </g>
+                          );
+                        })}
+
+                        {/* Map Tooltip */}
+                        {(hoveredBeach || hoveredProvince) && mousePos && (() => {
+                          const beachData = hoveredBeach ? (modelData.playas as Record<string, any>)[hoveredBeach] : null;
+                          const isBeach = !!beachData;
+                          const isHoveredActive = hoveredBeach === selectedBeach;
+                          
+                          // Get prediction info for tooltip
+                          let label = "";
+                          let val = 0;
+                          let levelColor = "#1d8c7a";
+                          
+                          if (isBeach && hoveredBeach) {
+                            if (isHoveredActive) {
+                              val = predictedNfai;
+                              label = riskLevel.label;
+                              levelColor = riskLevel.pinColor;
+                            } else {
+                              const predInfo = beachPredictions[hoveredBeach];
+                              val = predInfo ? predInfo.nfai : 0;
+                              label = predInfo ? predInfo.risk.label : "";
+                              levelColor = predInfo ? predInfo.risk.pinColor : "#6fa9a0";
+                            }
+                          }
+                          
+                          const pData = !beachData ? PROVINCE_DATA.find(p => p.id === hoveredProvince) : null;
+                          const geoFeature = !beachData ? geoFeatures.find(f => {
+                            const id = GEO_NAME_MAP[f.properties.province_name];
+                            return id === hoveredProvince || f.properties.province_name === hoveredProvince;
+                          }) : null;
+
+                          const displayName = hoveredBeach ?? pData?.name ?? geoFeature?.properties.province_name ?? hoveredProvince ?? "";
+                          if (!isBeach && pData) {
+                            levelColor = LEVEL_COLORS[pData.level];
+                          }
+                          
+                          const tw = 178, th = isBeach ? 58 : pData ? 54 : 32;
+                          const tx = mousePos.x + tw > 468 ? mousePos.x - tw - 8 : mousePos.x + 10;
+                          const ty = mousePos.y + th > 328 ? mousePos.y - th - 8 : mousePos.y + 10;
+
+                          return (
+                            <g style={{ pointerEvents: "none" }}>
+                              <rect x={tx} y={ty} width={tw} height={th} rx={7}
+                                fill={isDark ? "#061c2e" : "#ffffff"} stroke={levelColor} strokeWidth={0.9} opacity={0.97} />
+                              <rect x={tx + 8} y={ty + 6} width={isBeach ? (isHoveredActive && isManualMode ? 120 : 86) : 46} height={12} rx={3}
+                                fill={levelColor} opacity={0.2} />
+                              <text x={tx + 12} y={ty + 15} fill={levelColor} fontSize={8} fontFamily="DM Mono" fontWeight={600}>
+                                {isBeach ? (isHoveredActive && isManualMode ? "PREDICCIÓN (SIMULACIÓN)" : "PREDICCIÓN PLAYA") : "PROVINCIA"}
+                              </text>
+                              <text x={tx + 8} y={ty + 30} fill={isDark ? "#dff0eb" : "#0f172a"} fontSize={10} fontFamily="DM Sans" fontWeight={600}>
+                                {displayName}
+                              </text>
+                              {isBeach && (
+                                <text x={tx + 8} y={ty + 43} fill={isDark ? "#6fa9a0" : "#475569"} fontSize={9} fontFamily="DM Mono">
+                                  NFAI: {val.toFixed(4)} ({label})
+                                </text>
+                              )}
+                              {!isBeach && pData && (
+                                <text x={tx + 8} y={ty + 43} fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={9} fontFamily="DM Mono">
+                                  {pData.impact},000 ton acumuladas
+                                </text>
+                              )}
+                            </g>
+                          );
+                        })()}
+
+                        <text x={240} y={333} textAnchor="middle" fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={7} fontFamily="DM Mono" opacity={0.45}>República Dominicana</text>
+                        <text x={16} y={195} textAnchor="middle" fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={7} fontFamily="DM Mono" opacity={0.35} transform="rotate(-90,16,195)">Haití</text>
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* LIVE PREDICTION CARDS */}
+                  <div className="bg-card border border-border rounded-2xl p-6 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-4">
+                        <Activity className="w-5 h-5 text-accent" />
+                        <h2 className="font-display text-sm font-bold text-foreground">
+                          {isManualMode ? `Simulación en Vivo: Playa ${selectedBeach} (Personalizado)` : `Análisis de Referencia: Playa ${selectedBeach}`}
+                        </h2>
+                      </div>
+                      
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        {/* NFAI Display Card */}
+                        <div className="bg-background border border-border rounded-xl p-4 flex flex-col justify-center">
+                          <span className="text-[9px] font-mono uppercase text-muted-foreground mb-1">Índice NFAI Predicho</span>
+                          <div className="text-2xl font-display font-black text-foreground">
+                            {predictedNfai.toFixed(4)}
+                          </div>
+                        </div>
+
+                        {/* Risk Level Card */}
+                        <div className={`border rounded-xl p-4 flex flex-col justify-center ${riskLevel.bg}`}>
+                          <span className="text-[9px] font-mono uppercase text-muted-foreground mb-1">Nivel de Riesgo</span>
+                          <div className={`text-2xl font-display font-black ${riskLevel.color}`}>
+                            {riskLevel.label}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Linear Risk Gauge */}
+                      <div className="mt-4 bg-background border border-border rounded-xl p-4">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[10px] font-semibold text-foreground">Porcentaje de Riesgo Normalizado</span>
+                          <span className="text-[10px] font-mono font-bold text-foreground">{normalizedIndex.toFixed(1)}%</span>
+                        </div>
+                        <div className="h-3 w-full bg-border rounded-full overflow-hidden relative">
+                          <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500 opacity-20" />
+                          <div 
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              riskLevel.code === "low" ? "bg-emerald-500" : riskLevel.code === "mid" ? "bg-amber-500" : "bg-red-500"
+                            }`}
+                            style={{ width: `${normalizedIndex}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[8px] font-mono text-muted-foreground mt-1.5">
+                          <span>Bajo (0%)</span>
+                          <span>p50 (Medio)</span>
+                          <span>p80 (Alto)</span>
+                          <span>Crítico (100%)</span>
+                        </div>
+                      </div>
+
+                      {/* Contribution breakdown */}
+                      <div className="mt-4 bg-background/50 border border-border/80 rounded-xl p-4">
+                        <span className="text-[9px] font-mono uppercase text-muted-foreground mb-2 block">Desglose de Aportación de Variables</span>
+                        <div className="space-y-2.5">
+                          {contributions.map((c, i) => {
+                            const val = c.value;
+                            const isPositive = val >= 0;
+                            const widthPct = Math.min(100, (Math.abs(val) / 0.6) * 100);
+                            return (
+                              <div key={i} className="flex items-center gap-3">
+                                <span className="text-[11px] text-foreground font-medium w-24 flex-shrink-0 truncate">{c.name}</span>
+                                <div className="flex-1 h-2 bg-border/40 rounded-full relative overflow-hidden flex items-center">
+                                  <div 
+                                    className={`h-full rounded-full transition-all ${isPositive ? "bg-red-400 ml-auto left-1/2" : "bg-emerald-400 mr-auto right-1/2"}`}
+                                    style={{ 
+                                      width: `${widthPct / 2}%`,
+                                      position: "absolute",
+                                      left: isPositive ? "50%" : "auto",
+                                      right: isPositive ? "auto" : "50%"
+                                    }}
+                                  />
+                                  <div className="absolute left-1/2 w-0.5 h-full bg-border" />
+                                </div>
+                                <span className={`text-[9px] font-mono w-14 text-right ${val >= 0 ? "text-red-400" : "text-emerald-400"}`}>
+                                  {val >= 0 ? "+" : ""}{val.toFixed(4)}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* OLS FIT CHART */}
+              <div className="bg-card border border-border rounded-2xl p-6">
+                <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
+                  <div>
+                    <h2 className="font-display text-lg font-bold text-foreground">Ajuste del Modelo OLS — Predicho vs Observado</h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">Comparación de la predicción del modelo con las observaciones satelitales (Nov 2023 – Feb 2026)</p>
+                  </div>
+                  <span className="text-xs font-mono text-accent border border-accent/30 px-2.5 py-1 rounded-full">
+                    {modelData.metrics.n_obs} meses · fuente {modelData.source === "nc" ? "NetCDF" : "demo"}
+                  </span>
+                </div>
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={modelData.historical} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                    <XAxis 
+                      dataKey="time" 
+                      tick={{ fill: "var(--color-muted-foreground)", fontSize: 10, fontFamily: "var(--font-mono)" }} 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tickFormatter={(v) => {
+                        const d = new Date(v + "T00:00:00");
+                        return isNaN(d.getTime()) ? v : `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear().toString().slice(-2)}`;
+                      }}
+                    />
+                    <YAxis tick={{ fill: "var(--color-muted-foreground)", fontSize: 11, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} tickFormatter={v => v.toFixed(3)} width={52} />
+                    <Tooltip 
+                      contentStyle={tooltipStyle} 
+                      labelFormatter={(v) => {
+                        const d = new Date(v + "T00:00:00");
+                        return isNaN(d.getTime()) ? v : `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+                      }}
+                      formatter={(v: any, name: string) => [v ? v.toFixed(4) : "Sin datos", name === "nfai" ? "NFAI Observado" : "NFAI Predicho"]} 
+                    />
+                    <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: "12px", fontFamily: "var(--font-sans)" }} />
+                    <Line name="nfai" type="monotone" dataKey="nfai" stroke="var(--color-accent)" strokeWidth={2.5} dot={{ fill: "var(--color-accent)", r: 3.5, strokeWidth: 0 }} connectNulls={false} activeDot={{ r: 6 }} />
+                    <Line name="nfai_pred" type="monotone" dataKey="nfai_pred" stroke="var(--color-primary)" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={{ r: 5 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* METRICS GRID */}
+              <div className="grid md:grid-cols-2 gap-6">
+
+                {/* MODEL EQUATION */}
+                <div className="bg-card border border-border rounded-2xl p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Info className="w-5 h-5 text-accent" />
+                    <h3 className="font-display text-base font-bold text-foreground">Fórmula e Interpretación</h3>
+                  </div>
+                  <div className="bg-background border border-border rounded-xl p-5 mb-5 text-center">
+                    <div className="text-xs font-mono text-muted-foreground mb-2">Ecuación de Regresión OLS</div>
+                    <div className="text-xs sm:text-sm font-mono font-bold text-primary overflow-x-auto whitespace-nowrap py-1">
+                      NFAI = {modelData.model.const.toFixed(4)} + ({modelData.model.po4.toFixed(4)} × PO₄) + ({modelData.model.uo.toFixed(4)} × Uo) + ({modelData.model.sst_anomaly.toFixed(4)} × SST_anom)
+                    </div>
+                  </div>
+                  <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
+                    <p>
+                      <strong className="text-foreground">Fosfato (PO₄) ({modelData.model.po4.toFixed(2)}):</strong> Es el predictor con mayor peso positivo. El fósforo (nutriente agrícola) actúa como fertilizante del alga. Pequeñas alzas en su concentración provocan un crecimiento masivo.
+                    </p>
+                    <p>
+                      <strong className="text-foreground">Corriente marina (Uo) ({modelData.model.uo.toFixed(2)}):</strong> Las corrientes positivas avanzan hacia el este. Dado que el sargazo avanza del este hacia el oeste en el Caribe, corrientes hacia el oeste más débiles (Uo menos negativo o positivo) alivian la acumulación costera local.
+                    </p>
+                    <p>
+                      <strong className="text-foreground">Anomalía de SST ({modelData.model.sst_anomaly.toFixed(2)}):</strong> El calentamiento superficial del agua por encima de la media histórica acelera la tasa metabólica y de duplicación del sargazo, incrementando el volumen flotante.
+                    </p>
+                  </div>
+                </div>
+
+                {/* STATISTICAL METRICS */}
+                <div className="bg-card border border-border rounded-2xl p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Activity className="w-5 h-5 text-accent" />
+                    <h3 className="font-display text-base font-bold text-foreground">Métricas de Rendimiento</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mb-5">
+                    <div className="bg-background border border-border rounded-xl p-4">
+                      <div className="text-2xl font-display font-black text-foreground">
+                        {(modelData.metrics.r2 * 100).toFixed(1)}%
+                      </div>
+                      <span className="text-[10px] font-mono uppercase text-muted-foreground">R² (Coef. de Det.)</span>
+                      <p className="text-[9px] text-muted-foreground mt-1">Variabilidad explicada por el modelo</p>
+                    </div>
+                    <div className="bg-background border border-border rounded-xl p-4">
+                      <div className="text-2xl font-display font-black text-foreground">
+                        {modelData.metrics.mae_modelo.toFixed(4)}
+                      </div>
+                      <span className="text-[10px] font-mono uppercase text-muted-foreground">MAE del Modelo</span>
+                      <p className="text-[9px] text-muted-foreground mt-1">Error absoluto medio de la predicción</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3 text-xs text-muted-foreground leading-relaxed border-t border-border pt-4">
+                    <div className="flex justify-between">
+                      <span>R² Ajustado:</span>
+                      <span className="font-mono font-bold text-foreground">{modelData.metrics.r2_adj.toFixed(3)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Mejora vs Baseline (Promedio):</span>
+                      <span className="font-mono font-bold text-emerald-500">+{modelData.metrics.mejora_pct.toFixed(1)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Observaciones mensuales (N):</span>
+                      <span className="font-mono font-bold text-foreground">{modelData.metrics.n_obs} meses</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>F-statistic (p-value):</span>
+                      <span className="font-mono font-bold text-foreground">
+                        {modelData.metrics.f_stat.toFixed(2)} ({modelData.metrics.f_pvalue.toFixed(4)})
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
           </>
         )}
       </main>

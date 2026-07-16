@@ -40,3 +40,19 @@ Desktop.ini
 
 # Vite cache
 .vite/
+
+# Python ignore patterns
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.ipynb_checkpoints/
+.streamlit/config.toml
+.streamlit/secrets.toml
+
+# Streamlit NetCDF data files (if they put large data sets in data/ folder)
+Sargazord-main/data/*.nc
+

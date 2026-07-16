@@ -1,0 +1,37 @@
+name: Update Sargazo Live Data
+
+on:
+  schedule:
+    # Se ejecuta todos los domingos a las 00:00 UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+    # Permite ejecutarlo manualmente desde la pestaña Actions en GitHub
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Fetch Live Ocean Data
+      run: |
+        python Sargazord-main/fetch_live_data.py
+
+    - name: Commit and Push Changes
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add src/app/model_data.json Sargazord-main/data.json
+        if git diff --staged --quiet; then
+          echo "No se detectaron cambios en los datos oceanográficos."
+        else
+          git commit -m "Auto-update: datos oceanográficos en vivo y predicciones de sargazo"
+          git push
+        fi

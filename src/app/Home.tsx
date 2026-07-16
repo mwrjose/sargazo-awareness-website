@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router";
 import {
   AreaChart, Area, LineChart, Line,
@@ -9,17 +9,18 @@ import {
   ChevronDown, ArrowRight, BarChart2, Waves, Leaf,
   AlertTriangle, Fish, Globe, ExternalLink, Menu, X, Loader2,
   Zap, Thermometer, FlaskConical, Turtle, Wind, Sprout,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { ThemeToggle } from "./components/ThemeToggle";
 
-const RAW_CSV_BASE = "https://raw.githubusercontent.com/Cipre-Holding/sargazo/master";
+const RAW_CSV_BASE = "";
 const MONTH_NAMES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 interface AnnualPoint { year: string; biomasa: number }
 interface MonthlyPoint { label: string; biomasa: number; year: number; month: number }
 
 async function fetchCSV(filename: string): Promise<Record<string, string>[]> {
-  const res = await fetch(`${RAW_CSV_BASE}/${filename}`);
+  const res = await fetch(`/${filename}`);
   const text = await res.text();
   const lines = text.trim().split("\n");
   const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, ""));
@@ -80,6 +81,51 @@ export default function Home() {
   const [monthlyData, setMonthlyData] = useState<MonthlyPoint[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [dataError, setDataError] = useState(false);
+
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const carouselRef = useRef<HTMLDivElement>(null);
+
+  // Scroll horizontal del carrete
+  const scrollCarousel = (direction: "left" | "right") => {
+    if (carouselRef.current) {
+      const scrollAmount = 400;
+      carouselRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth"
+      });
+    }
+  };
+
+  // Navegación de Lightbox
+  const prevImage = () => {
+    if (selectedImageIndex !== null) {
+      setSelectedImageIndex((prev) => 
+        prev === 0 ? galleryImages.length - 1 : (prev as number) - 1
+      );
+    }
+  };
+
+  const nextImage = () => {
+    if (selectedImageIndex !== null) {
+      setSelectedImageIndex((prev) => 
+        prev === galleryImages.length - 1 ? 0 : (prev as number) + 1
+      );
+    }
+  };
+
+  // Atajos de teclado para el Lightbox
+  useEffect(() => {
+    if (selectedImageIndex === null) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedImageIndex(null);
+      else if (e.key === "ArrowLeft") prevImage();
+      else if (e.key === "ArrowRight") nextImage();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedImageIndex]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 60);
@@ -164,8 +210,15 @@ export default function Home() {
 
       {/* HERO */}
       <section className="relative min-h-screen flex items-end pb-28">
-        <div className="absolute inset-0 bg-background">
-          <img src="https://images.unsplash.com/photo-1725286982432-7177221ea6fa?w=1920&h=1080&fit=crop&auto=format" alt="Sargazo acumulado en la orilla de una playa caribeña" className="w-full h-full object-cover opacity-30 mix-blend-luminosity dark:opacity-40" />
+        <div
+          onClick={() => setSelectedImageIndex(0)}
+          className="absolute inset-0 bg-background cursor-pointer group/hero-bg"
+        >
+          <img
+            src="https://images.unsplash.com/photo-1725286982432-7177221ea6fa?w=1920&h=1080&fit=crop&auto=format"
+            alt="Sargazo acumulado en la orilla de una playa caribeña"
+            className="w-full h-full object-cover opacity-60 dark:opacity-40 dark:mix-blend-luminosity group-hover/hero-bg:scale-[1.02] group-hover/hero-bg:opacity-75 dark:group-hover/hero-bg:opacity-45 transition-all duration-700"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-background/10" />
           <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/30 to-transparent" />
         </div>
@@ -209,8 +262,15 @@ export default function Home() {
             </div>
           </div>
           <div className="relative">
-            <div className="aspect-[4/5] rounded-2xl overflow-hidden bg-card">
-              <img src="https://images.unsplash.com/photo-1679266352183-e9026ca3ba57?w=800&h=1000&fit=crop&auto=format" alt="Acumulación de sargazo en la playa" className="w-full h-full object-cover" />
+            <div
+              onClick={() => setSelectedImageIndex(1)}
+              className="aspect-[4/5] rounded-2xl overflow-hidden bg-card cursor-pointer group/que-es-img"
+            >
+              <img
+                src="https://images.unsplash.com/photo-1679266352183-e9026ca3ba57?w=800&h=1000&fit=crop&auto=format"
+                alt="Acumulación de sargazo en la playa"
+                className="w-full h-full object-cover group-hover/que-es-img:scale-105 transition-transform duration-700"
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-background/60 to-transparent" />
             </div>
             <div className="absolute -bottom-6 -left-6 bg-card border border-border rounded-xl p-5 shadow-2xl">
@@ -230,8 +290,15 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid md:grid-cols-12 gap-10 items-center">
             <div className="md:col-span-4 relative">
-              <div className="rounded-2xl overflow-hidden bg-background h-80 md:h-[500px]">
-                <img src="https://images.unsplash.com/photo-1697839374552-fbfad5f9f1cb?w=600&h=700&fit=crop&auto=format" alt="Masa de sargazo flotando en el mar Caribe" className="w-full h-full object-cover" />
+              <div
+                onClick={() => setSelectedImageIndex(2)}
+                className="rounded-2xl overflow-hidden bg-background h-80 md:h-[500px] cursor-pointer group/fenomeno-img"
+              >
+                <img
+                  src="https://images.unsplash.com/photo-1697839374552-fbfad5f9f1cb?w=600&h=700&fit=crop&auto=format"
+                  alt="Masa de sargazo flotando en el mar Caribe"
+                  className="w-full h-full object-cover group-hover/fenomeno-img:scale-105 transition-transform duration-700"
+                />
               </div>
             </div>
             <div className="md:col-span-8 space-y-6">
@@ -363,15 +430,112 @@ export default function Home() {
             <span className="text-accent font-mono text-xs tracking-widest uppercase mb-4 block">05 — Galería</span>
             <h2 className="font-display text-4xl md:text-5xl font-bold">El sargazo en imágenes</h2>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-            {galleryImages.map((img, i) => (
-              <div key={i} className={`${img.h} rounded-xl overflow-hidden bg-card group cursor-pointer`}>
-                <img src={`https://images.unsplash.com/photo-${img.id}?w=800&h=600&fit=crop&auto=format`} alt={img.alt} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-              </div>
-            ))}
+          
+          <div className="relative group/gallery">
+            {/* Botón Izquierdo del Carrete */}
+            <button
+              onClick={() => scrollCarousel("left")}
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background border border-border text-foreground p-3 rounded-full shadow-lg backdrop-blur-sm opacity-0 group-hover/gallery:opacity-100 transition-opacity duration-300 pointer-events-auto"
+              aria-label="Desplazar a la izquierda"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+
+            {/* Carrusel Horizontal (Carrete) */}
+            <div
+              ref={carouselRef}
+              className="flex overflow-x-auto gap-6 scroll-smooth pb-6 snap-x snap-mandatory scrollbar-none"
+              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+            >
+              {galleryImages.map((img, i) => (
+                <div
+                  key={i}
+                  onClick={() => setSelectedImageIndex(i)}
+                  className="snap-start flex-shrink-0 w-80 sm:w-96 aspect-[4/3] rounded-2xl overflow-hidden bg-card group/item cursor-pointer border border-border/50 hover:border-primary/50 shadow-md hover:shadow-xl transition-all duration-500"
+                >
+                  <img
+                    src={`https://images.unsplash.com/photo-${img.id}?w=800&h=600&fit=crop&auto=format`}
+                    alt={img.alt}
+                    className="w-full h-full object-cover group-hover/item:scale-105 transition-transform duration-700"
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Botón Derecho del Carrete */}
+            <button
+              onClick={() => scrollCarousel("right")}
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background border border-border text-foreground p-3 rounded-full shadow-lg backdrop-blur-sm opacity-0 group-hover/gallery:opacity-100 transition-opacity duration-300 pointer-events-auto"
+              aria-label="Desplazar a la derecha"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
           </div>
         </div>
       </section>
+
+      {/* LIGHTBOX MODAL */}
+      {selectedImageIndex !== null && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4 transition-all duration-300"
+          onClick={() => setSelectedImageIndex(null)}
+        >
+          {/* Botón cerrar */}
+          <button
+            onClick={() => setSelectedImageIndex(null)}
+            className="absolute top-6 right-6 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur-sm transition-colors z-[110]"
+            aria-label="Cerrar pantalla completa"
+          >
+            <X className="w-6 h-6" />
+          </button>
+
+          {/* Botón Izquierda */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              prevImage();
+            }}
+            className="absolute left-6 top-1/2 -translate-y-1/2 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-4 rounded-full backdrop-blur-sm transition-colors z-[110]"
+            aria-label="Imagen anterior"
+          >
+            <ChevronLeft className="w-8 h-8" />
+          </button>
+
+          {/* Imagen y Pie de foto */}
+          <div
+            className="relative max-w-5xl max-h-[80vh] flex flex-col items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={`https://images.unsplash.com/photo-${galleryImages[selectedImageIndex].id}?w=1600&h=1200&fit=max&auto=format`}
+              alt={galleryImages[selectedImageIndex].alt}
+              className="max-w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl border border-white/10"
+            />
+            
+            {/* Pie de foto */}
+            <div className="absolute bottom-[-60px] left-0 right-0 text-center px-4">
+              <p className="text-white text-base font-medium drop-shadow-md">
+                {galleryImages[selectedImageIndex].alt}
+              </p>
+              <p className="text-white/60 text-xs font-mono mt-1">
+                {selectedImageIndex + 1} de {galleryImages.length}
+              </p>
+            </div>
+          </div>
+
+          {/* Botón Derecha */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              nextImage();
+            }}
+            className="absolute right-6 top-1/2 -translate-y-1/2 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-4 rounded-full backdrop-blur-sm transition-colors z-[110]"
+            aria-label="Siguiente imagen"
+          >
+            <ChevronRight className="w-8 h-8" />
+          </button>
+        </div>
+      )}
 
       {/* CURIOSIDADES */}
       <section className="py-28 px-6 bg-card border-t border-border">

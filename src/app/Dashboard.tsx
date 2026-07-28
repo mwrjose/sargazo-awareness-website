@@ -1300,11 +1300,11 @@ export default function Dashboard() {
                           
                           const maxChars = Math.max(
                             displayName.length,
-                            isBeach ? (isHoveredActive && isManualMode ? 24 : 17) : 10,
-                            isBeach ? 25 : 20
+                            isBeach ? (isHoveredActive && isManualMode ? 24 : 17) : 12,
+                            isBeach ? 25 : 22
                           );
-                          const tw = Math.max(180, maxChars * 6.8 + 24);
-                          const th = isBeach ? 58 : pData ? 54 : 32;
+                          const tw = Math.max(200, maxChars * 7.2 + 24);
+                          const th = isBeach ? 64 : pData ? 60 : 46;
                           const tx = mousePos.x + tw > 468 ? mousePos.x - tw - 8 : mousePos.x + 10;
                           const ty = mousePos.y + th > 328 ? mousePos.y - th - 8 : mousePos.y + 10;
 
@@ -1321,12 +1321,12 @@ export default function Dashboard() {
                                 {displayName}
                               </text>
                               {isBeach && (
-                                <text x={tx + 8} y={ty + 43} fill={isDark ? "#6fa9a0" : "#475569"} fontSize={9} fontFamily="DM Mono">
+                                <text x={tx + 8} y={ty + 45} fill={isDark ? "#6fa9a0" : "#475569"} fontSize={9} fontFamily="DM Mono">
                                   Riesgo: {(val * 100).toFixed(1)}% ({label})
                                 </text>
                               )}
                               {!isBeach && pData && (
-                                <text x={tx + 8} y={ty + 43} fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={9} fontFamily="DM Mono">
+                                <text x={tx + 8} y={ty + 45} fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={9} fontFamily="DM Mono">
                                   {pData.impact},000 ton acumuladas
                                 </text>
                               )}

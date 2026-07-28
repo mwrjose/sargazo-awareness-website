@@ -1298,7 +1298,13 @@ export default function Dashboard() {
                             levelColor = LEVEL_COLORS[pData.level];
                           }
                           
-                          const tw = 178, th = isBeach ? 58 : pData ? 54 : 32;
+                          const maxChars = Math.max(
+                            displayName.length,
+                            isBeach ? (isHoveredActive && isManualMode ? 24 : 17) : 10,
+                            isBeach ? 25 : 20
+                          );
+                          const tw = Math.max(180, maxChars * 6.8 + 24);
+                          const th = isBeach ? 58 : pData ? 54 : 32;
                           const tx = mousePos.x + tw > 468 ? mousePos.x - tw - 8 : mousePos.x + 10;
                           const ty = mousePos.y + th > 328 ? mousePos.y - th - 8 : mousePos.y + 10;
 
@@ -1306,7 +1312,7 @@ export default function Dashboard() {
                             <g style={{ pointerEvents: "none" }}>
                               <rect x={tx} y={ty} width={tw} height={th} rx={7}
                                 fill={isDark ? "#061c2e" : "#ffffff"} stroke={levelColor} strokeWidth={0.9} opacity={0.97} />
-                              <rect x={tx + 8} y={ty + 6} width={isBeach ? (isHoveredActive && isManualMode ? 120 : 86) : 46} height={12} rx={3}
+                              <rect x={tx + 8} y={ty + 6} width={isBeach ? (isHoveredActive && isManualMode ? 116 : 82) : 48} height={12} rx={3}
                                 fill={levelColor} opacity={0.2} />
                               <text x={tx + 12} y={ty + 15} fill={levelColor} fontSize={8} fontFamily="DM Mono" fontWeight={600}>
                                 {isBeach ? (isHoveredActive && isManualMode ? "PREDICCIÓN (SIMULACIÓN)" : "PREDICCIÓN PLAYA") : "PROVINCIA"}
@@ -1316,7 +1322,7 @@ export default function Dashboard() {
                               </text>
                               {isBeach && (
                                 <text x={tx + 8} y={ty + 43} fill={isDark ? "#6fa9a0" : "#475569"} fontSize={9} fontFamily="DM Mono">
-                                  NFAI: {val.toFixed(4)} ({label})
+                                  Riesgo: {(val * 100).toFixed(1)}% ({label})
                                 </text>
                               )}
                               {!isBeach && pData && (

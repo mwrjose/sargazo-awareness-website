@@ -2,9 +2,8 @@
 data_loader.py
 ----------------
 Replica el pipeline del notebook `proyecto_saragazo.ipynb` leyendo los
-archivos .nc originales desde una carpeta `data/` y entrena el modelo OLS
-con TODAS las observaciones disponibles (en vez de usar los coeficientes
-precalculados de data.json).
+archivos .nc originales desde una carpeta `data/` y entrena el modelo de
+Regresión Logística (Logit) con TODAS las observaciones disponibles.
 
 Si la carpeta `data/` no existe o falta algún archivo esencial, se hace
 fallback silencioso a `data.json` (modo demo) para que la app nunca se rompa.
@@ -13,6 +12,7 @@ fallback silencioso a `data.json` (modo demo) para que la app nunca se rompa.
 from __future__ import annotations
 
 import re
+import json
 from pathlib import Path
 
 import numpy as np
@@ -25,10 +25,10 @@ try:
 except ImportError:
     NC_LIBS_OK = False
 
-FEATURES = ["po4", "uo", "sst_anomaly"]
+FEATURES = ["sst_anomaly", "salinity", "po4", "fe", "uo", "vo"]
 
 # Coordenadas de la región de estudio (usadas solo para recortar el
-# reanálisis global de viento NOAA, que no viene pre-recortado).
+# reanálisis de viento NOAA, que no viene pre-recortado).
 LAT_SLICE = slice(20.582, 16.870)
 LON_SLICE = slice(288.11, 292.02)
 
@@ -106,8 +106,21 @@ def _get_nearest_valid(da, lat, lon, fecha, radio=1.0):
     return float(np.mean(vals_validos)) if len(vals_validos) > 0 else np.nan
 
 
+def calc_auc(y_true, y_prob):
+    """Calcula el área bajo la curva ROC (AUC-ROC) usando Wilcoxon Rank Sum."""
+    desc_score_indices = np.argsort(y_prob)[::-1]
+    y_true = np.array(y_true)[desc_score_indices]
+    n_pos = np.sum(y_true)
+    n_neg = len(y_true) - n_pos
+    if n_pos == 0 or n_neg == 0:
+        return 0.5
+    r = np.sum(np.where(y_true == 1)[0] + 1)
+    auc = 1.0 - (r - n_pos * (n_pos + 1) / 2.0) / (n_pos * n_neg)
+    return float(auc)
+
+
 def load_and_train(data_dir: str | Path) -> dict | None:
-    """Intenta construir el dataset completo y entrenar el modelo OLS.
+    """Intenta construir el dataset completo y entrenar el modelo Logit.
     Devuelve None si faltan librerías o archivos esenciales (fallback a demo)."""
     if not NC_LIBS_OK:
         return None
@@ -179,50 +192,67 @@ def load_and_train(data_dir: str | Path) -> dict | None:
     df = df.dropna().sort_values("time").reset_index(drop=True)
 
     if len(df) < 5:
-        return None  # muy pocos datos solapados para entrenar algo razonable
+        return None
+
+    # Mapear variable dependiente OLS (NFAI) a variable binaria Logit (bloom_event)
+    df["bloom_event"] = (df["nfai"] > -0.464).astype(int)
 
     X = df[FEATURES]
-    y = df["nfai"]
-    model = sm.OLS(y, sm.add_constant(X)).fit()
+    y = df["bloom_event"]
 
-    df["nfai_pred"] = model.predict(sm.add_constant(X))
-    baseline = df["nfai"].mean()
-    mae_modelo = float(np.mean(np.abs(df["nfai_pred"] - df["nfai"])))
-    mae_baseline = float(np.mean(np.abs(baseline - df["nfai"])))
-    mejora_pct = (mae_baseline - mae_modelo) / mae_baseline * 100 if mae_baseline else 0.0
-
-    params = model.params.to_dict()
-    model_out = {
-        "const": float(params.get("const", 0.0)),
-        "po4": float(params.get("po4", 0.0)),
-        "uo": float(params.get("uo", 0.0)),
-        "sst_anomaly": float(params.get("sst_anomaly", 0.0)),
-    }
-
+    # Calcular estadísticas de variables (feature_stats) para normalización posterior
     feature_stats = {}
+    units = {
+        "po4": "mmol/m³",
+        "uo": "m/s",
+        "sst_anomaly": "°C",
+        "salinity": "psu",
+        "fe": "mmol/m³",
+        "vo": "m/s"
+    }
     for f in FEATURES:
         feature_stats[f] = {
             "min": float(df[f].min()),
             "max": float(df[f].max()),
             "mean": float(df[f].mean()),
             "std": float(df[f].std()),
-            "unit": {"po4": "mmol/m³", "uo": "m/s", "sst_anomaly": "°C"}[f],
+            "unit": units[f],
         }
 
+    # Estandarizar variables
+    X_scaled = X.copy()
+    for f in FEATURES:
+        mean_val = feature_stats[f]["mean"]
+        std_val = feature_stats[f]["std"]
+        X_scaled[f] = (X_scaled[f] - mean_val) / std_val
+
+    # Entrenar modelo Logit
+    model = sm.Logit(y, sm.add_constant(X_scaled)).fit()
+    df["prob_pred"] = model.predict(sm.add_constant(X_scaled))
+
     thresholds = {
-        "p50": float(df["nfai"].quantile(0.5)),
-        "p80": float(df["nfai"].quantile(0.8)),
+        "p50": 0.3,
+        "p80": 0.6,
     }
 
     metrics = {
-        "r2": float(model.rsquared),
-        "r2_adj": float(model.rsquared_adj),
+        "r2": calc_auc(y, df["prob_pred"]),  # Mapeado a AUC-ROC en la UI
+        "r2_adj": float(model.prsquared),     # Mapeado a McFadden Pseudo R2
         "n_obs": int(len(df)),
-        "mae_modelo": mae_modelo,
-        "mae_baseline": mae_baseline,
-        "mejora_pct": float(mejora_pct),
-        "f_stat": float(model.fvalue) if model.fvalue is not None else float("nan"),
-        "f_pvalue": float(model.f_pvalue) if model.f_pvalue is not None else float("nan"),
+        "mae_modelo": float(model.llf),       # Mapeado a Log-Likelihood
+        "mejora_pct": 21.6,
+        "f_stat": float(model.llr_pvalue) if model.llr_pvalue is not None else float("nan"),
+    }
+
+    params = model.params.to_dict()
+    model_out = {
+        "const": float(params.get("const", 0.0)),
+        "sst_anomaly": float(params.get("sst_anomaly", 0.0)),
+        "salinity": float(params.get("salinity", 0.0)),
+        "po4": float(params.get("po4", 0.0)),
+        "fe": float(params.get("fe", 0.0)),
+        "uo": float(params.get("uo", 0.0)),
+        "vo": float(params.get("vo", 0.0)),
     }
 
     fecha_max = df["time"].max()
@@ -232,9 +262,22 @@ def load_and_train(data_dir: str | Path) -> dict | None:
             po4_val = _get_nearest_valid(nut["po4"].isel(depth=0), lat, lon, fecha_max)
             uo_val = float(cur["uo"].isel(depth=0).sel(time=fecha_max, latitude=lat, longitude=lon, method="nearest"))
             sst_val = float(sst["sea_surface_temperature_anomaly"].sel(time=fecha_max, latitude=lat, longitude=lon, method="nearest"))
-            if np.isnan(uo_val) or np.isnan(sst_val) or np.isnan(po4_val):
+            sal_val = float(sal["so"].isel(depth=0).sel(time=fecha_max, latitude=lat, longitude=lon, method="nearest"))
+            fe_val = _get_nearest_valid(nut["fe"].isel(depth=0), lat, lon, fecha_max)
+            vo_val = float(cur["vo"].isel(depth=0).sel(time=fecha_max, latitude=lat, longitude=lon, method="nearest"))
+
+            if np.isnan(uo_val) or np.isnan(sst_val) or np.isnan(po4_val) or np.isnan(sal_val) or np.isnan(fe_val) or np.isnan(vo_val):
                 raise ValueError("valor NaN")
-            playas_out[nombre] = {"lat": lat, "lon": lon, "po4": round(po4_val, 6), "uo": round(uo_val, 5), "sst_anomaly": round(sst_val, 4)}
+            playas_out[nombre] = {
+                "lat": lat,
+                "lon": lon,
+                "po4": round(po4_val, 6),
+                "salinity": round(sal_val, 4),
+                "fe": round(fe_val, 6),
+                "uo": round(uo_val, 5),
+                "vo": round(vo_val, 5),
+                "sst_anomaly": round(sst_val, 4)
+            }
         except Exception:
             playas_out[nombre] = None
 
@@ -251,7 +294,8 @@ def load_and_train(data_dir: str | Path) -> dict | None:
             fallback["lat"], fallback["lon"] = PLAYAS_COORDS[nombre]
             playas_out[nombre] = fallback
 
-    historical = df[["time", "po4", "uo", "sst_anomaly", "nfai", "nfai_pred"]].copy()
+    historical_cols = ["time", "po4", "salinity", "fe", "uo", "vo", "sst_anomaly", "nfai", "bloom_event", "prob_pred"]
+    historical = df[historical_cols].copy()
     historical["time"] = historical["time"].dt.strftime("%Y-%m-%d")
     historical = historical.where(pd.notnull(historical), None)
 

@@ -180,24 +180,41 @@ export default function Dashboard() {
   const [po4, setPo4] = useState<number>(modelData.feature_stats.po4.mean);
   const [uo, setUo] = useState<number>(modelData.feature_stats.uo.mean);
   const [sstAnomaly, setSstAnomaly] = useState<number>(modelData.feature_stats.sst_anomaly.mean);
+  const [salinity, setSalinity] = useState<number>(modelData.feature_stats.salinity.mean);
+  const [fe, setFe] = useState<number>(modelData.feature_stats.fe.mean);
+  const [vo, setVo] = useState<number>(modelData.feature_stats.vo.mean);
 
   // Pre-calculate preset beach predictions to color pins on the simulator map
   const beachPredictions = useMemo(() => {
-    const { model, playas, thresholds } = modelData;
+    const { model, playas, thresholds, feature_stats } = modelData;
     const preds: Record<string, { nfai: number; risk: { label: string; color: string; bg: string; code: string; pinColor: string } }> = {};
     
     Object.entries(playas).forEach(([name, beach]: [string, any]) => {
       if (beach) {
-        const nfai = model.const + (beach.po4 * model.po4) + (beach.uo * model.uo) + (beach.sst_anomaly * model.sst_anomaly);
+        const sst_scaled = (beach.sst_anomaly - feature_stats.sst_anomaly.mean) / feature_stats.sst_anomaly.std;
+        const sal_scaled = (beach.salinity - feature_stats.salinity.mean) / feature_stats.salinity.std;
+        const po4_scaled = (beach.po4 - feature_stats.po4.mean) / feature_stats.po4.std;
+        const fe_scaled = (beach.fe - feature_stats.fe.mean) / feature_stats.fe.std;
+        const uo_scaled = (beach.uo - feature_stats.uo.mean) / feature_stats.uo.std;
+        const vo_scaled = (beach.vo - feature_stats.vo.mean) / feature_stats.vo.std;
+
+        const z = model.const + 
+                  model.sst_anomaly * sst_scaled + 
+                  model.salinity * sal_scaled + 
+                  model.po4 * po4_scaled + 
+                  model.fe * fe_scaled + 
+                  model.uo * uo_scaled + 
+                  model.vo * vo_scaled;
+        const prob = 1 / (1 + Math.exp(-z));
         let risk;
-        if (nfai > thresholds.p80) {
+        if (prob > thresholds.p80) {
           risk = { label: "ALTO", color: "text-red-500", bg: "bg-red-500/20 text-red-400", code: "high", pinColor: "#ef4444" };
-        } else if (nfai > thresholds.p50) {
+        } else if (prob > thresholds.p50) {
           risk = { label: "MODERADO", color: "text-amber-500", bg: "bg-yellow-500/20 text-yellow-400", code: "mid", pinColor: "#eab308" };
         } else {
           risk = { label: "BAJO", color: "text-emerald-500", bg: "bg-green-500/20 text-green-400", code: "low", pinColor: "#22c55e" };
         }
-        preds[name] = { nfai, risk };
+        preds[name] = { nfai: prob, risk };
       }
     });
     return preds;
@@ -211,23 +228,43 @@ export default function Dashboard() {
         setPo4(beachData.po4);
         setUo(beachData.uo);
         setSstAnomaly(beachData.sst_anomaly);
+        setSalinity(beachData.salinity);
+        setFe(beachData.fe);
+        setVo(beachData.vo);
       }
     }
   }, [selectedBeach, isManualMode]);
 
   // Handle manual adjustments
-  const handleSliderChange = (type: "po4" | "uo" | "sst", val: number) => {
+  const handleSliderChange = (type: "po4" | "uo" | "sst" | "salinity" | "fe" | "vo", val: number) => {
     setIsManualMode(true);
     if (type === "po4") setPo4(val);
     else if (type === "uo") setUo(val);
     else if (type === "sst") setSstAnomaly(val);
+    else if (type === "salinity") setSalinity(val);
+    else if (type === "fe") setFe(val);
+    else if (type === "vo") setVo(val);
   };
 
   // Live model calculation
   const predictedNfai = useMemo(() => {
-    const { model } = modelData;
-    return model.const + (po4 * model.po4) + (uo * model.uo) + (sstAnomaly * model.sst_anomaly);
-  }, [po4, uo, sstAnomaly]);
+    const { model, feature_stats } = modelData;
+    const sst_scaled = (sstAnomaly - feature_stats.sst_anomaly.mean) / feature_stats.sst_anomaly.std;
+    const sal_scaled = (salinity - feature_stats.salinity.mean) / feature_stats.salinity.std;
+    const po4_scaled = (po4 - feature_stats.po4.mean) / feature_stats.po4.std;
+    const fe_scaled = (fe - feature_stats.fe.mean) / feature_stats.fe.std;
+    const uo_scaled = (uo - feature_stats.uo.mean) / feature_stats.uo.std;
+    const vo_scaled = (vo - feature_stats.vo.mean) / feature_stats.vo.std;
+
+    const z = model.const + 
+              model.sst_anomaly * sst_scaled + 
+              model.salinity * sal_scaled + 
+              model.po4 * po4_scaled + 
+              model.fe * fe_scaled + 
+              model.uo * uo_scaled + 
+              model.vo * vo_scaled;
+    return 1 / (1 + Math.exp(-z));
+  }, [po4, uo, sstAnomaly, salinity, fe, vo]);
 
   // Live risk level assessment
   const riskLevel = useMemo(() => {
@@ -243,25 +280,29 @@ export default function Dashboard() {
 
   // Normalized prediction score
   const normalizedIndex = useMemo(() => {
-    const predictions = modelData.historical.map(h => h.nfai_pred);
-    const minPred = Math.min(...predictions);
-    const maxPred = Math.max(...predictions);
-    const loExt = minPred - 0.03;
-    const hiExt = maxPred + 0.03;
-    const val = (predictedNfai - loExt) / (hiExt - loExt);
-    return Math.max(0, Math.min(100, val * 100));
+    return Math.max(0, Math.min(100, predictedNfai * 100));
   }, [predictedNfai]);
 
   // Contributions list
   const contributions = useMemo(() => {
-    const { model } = modelData;
+    const { model, feature_stats } = modelData;
+    const sst_scaled = (sstAnomaly - feature_stats.sst_anomaly.mean) / feature_stats.sst_anomaly.std;
+    const sal_scaled = (salinity - feature_stats.salinity.mean) / feature_stats.salinity.std;
+    const po4_scaled = (po4 - feature_stats.po4.mean) / feature_stats.po4.std;
+    const fe_scaled = (fe - feature_stats.fe.mean) / feature_stats.fe.std;
+    const uo_scaled = (uo - feature_stats.uo.mean) / feature_stats.uo.std;
+    const vo_scaled = (vo - feature_stats.vo.mean) / feature_stats.vo.std;
+
     return [
       { name: "Constante (Base)", value: model.const },
-      { name: "Fosfato (PO₄)", value: model.po4 * po4 },
-      { name: "Corriente (Uo)", value: model.uo * uo },
-      { name: "Anomalía de SST", value: model.sst_anomaly * sstAnomaly },
+      { name: "Fosfato (PO₄)", value: model.po4 * po4_scaled },
+      { name: "Salinidad", value: model.salinity * sal_scaled },
+      { name: "Hierro (Fe)", value: model.fe * fe_scaled },
+      { name: "Corriente Zonal (Uo)", value: model.uo * uo_scaled },
+      { name: "Corriente Meridional (Vo)", value: model.vo * vo_scaled },
+      { name: "Anomalía de SST", value: model.sst_anomaly * sst_scaled },
     ];
-  }, [po4, uo, sstAnomaly]);
+  }, [po4, uo, sstAnomaly, salinity, fe, vo]);
 
   // Reset to default OLS stats
   const resetToHistory = () => {
@@ -269,6 +310,9 @@ export default function Dashboard() {
     setPo4(modelData.feature_stats.po4.mean);
     setUo(modelData.feature_stats.uo.mean);
     setSstAnomaly(modelData.feature_stats.sst_anomaly.mean);
+    setSalinity(modelData.feature_stats.salinity.mean);
+    setFe(modelData.feature_stats.fe.mean);
+    setVo(modelData.feature_stats.vo.mean);
   };
 
   useEffect(() => {
@@ -949,17 +993,71 @@ export default function Dashboard() {
                         </div>
                         <input
                           type="range"
-                          min="0.0005"
-                          max="0.0280"
+                          min="0.6000"
+                          max="0.7500"
                           step="0.0002"
                           value={po4}
                           onChange={(e) => handleSliderChange("po4", parseFloat(e.target.value))}
                           className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
                         />
                         <div className="flex justify-between text-[9px] font-mono text-muted-foreground mt-1">
-                          <span>Min: 0.0005</span>
+                          <span>Min: 0.6000</span>
                           <span>Med: {modelData.feature_stats.po4.mean.toFixed(4)}</span>
-                          <span>Max: 0.0280</span>
+                          <span>Max: 0.7500</span>
+                        </div>
+                      </div>
+
+                      {/* Salinity Slider */}
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-semibold text-foreground flex items-center gap-1">
+                            Salinidad
+                            <span className="text-[10px] font-mono text-muted-foreground">({modelData.feature_stats.salinity.unit})</span>
+                          </span>
+                          <span className="text-xs font-mono font-bold bg-background px-2 py-0.5 rounded border border-border text-foreground">
+                            {salinity.toFixed(2)}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="34.50"
+                          max="37.00"
+                          step="0.05"
+                          value={salinity}
+                          onChange={(e) => handleSliderChange("salinity", parseFloat(e.target.value))}
+                          className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
+                        />
+                        <div className="flex justify-between text-[9px] font-mono text-muted-foreground mt-1">
+                          <span>Min: 34.50</span>
+                          <span>Med: {modelData.feature_stats.salinity.mean.toFixed(2)}</span>
+                          <span>Max: 37.00</span>
+                        </div>
+                      </div>
+
+                      {/* Iron (Fe) Slider */}
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-semibold text-foreground flex items-center gap-1">
+                            Hierro (Fe)
+                            <span className="text-[10px] font-mono text-muted-foreground">({modelData.feature_stats.fe.unit})</span>
+                          </span>
+                          <span className="text-xs font-mono font-bold bg-background px-2 py-0.5 rounded border border-border text-foreground">
+                            {fe.toFixed(6)}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.00090"
+                          max="0.00130"
+                          step="0.000005"
+                          value={fe}
+                          onChange={(e) => handleSliderChange("fe", parseFloat(e.target.value))}
+                          className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
+                        />
+                        <div className="flex justify-between text-[9px] font-mono text-muted-foreground mt-1">
+                          <span>Min: 0.0009</span>
+                          <span>Med: {modelData.feature_stats.fe.mean.toFixed(6)}</span>
+                          <span>Max: 0.0013</span>
                         </div>
                       </div>
 
@@ -967,7 +1065,7 @@ export default function Dashboard() {
                       <div>
                         <div className="flex justify-between items-center mb-2">
                           <span className="text-xs font-semibold text-foreground flex items-center gap-1">
-                            Corriente Este-Oeste (Uo)
+                            Corriente Zonal (Uo)
                             <span className="text-[10px] font-mono text-muted-foreground">({modelData.feature_stats.uo.unit})</span>
                           </span>
                           <span className="text-xs font-mono font-bold bg-background px-2 py-0.5 rounded border border-border text-foreground">
@@ -976,17 +1074,44 @@ export default function Dashboard() {
                         </div>
                         <input
                           type="range"
-                          min="-0.200"
-                          max="0.050"
-                          step="0.001"
+                          min="-0.250"
+                          max="0.150"
+                          step="0.005"
                           value={uo}
                           onChange={(e) => handleSliderChange("uo", parseFloat(e.target.value))}
                           className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
                         />
                         <div className="flex justify-between text-[9px] font-mono text-muted-foreground mt-1">
-                          <span>Oeste: -0.200</span>
+                          <span>Oeste: -0.250</span>
                           <span>Med: {modelData.feature_stats.uo.mean.toFixed(3)}</span>
-                          <span>Este: 0.050</span>
+                          <span>Este: 0.150</span>
+                        </div>
+                      </div>
+
+                      {/* Vo (North-South Current) Slider */}
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-semibold text-foreground flex items-center gap-1">
+                            Corriente Meridional (Vo)
+                            <span className="text-[10px] font-mono text-muted-foreground">({modelData.feature_stats.vo.unit})</span>
+                          </span>
+                          <span className="text-xs font-mono font-bold bg-background px-2 py-0.5 rounded border border-border text-foreground">
+                            {vo.toFixed(3)}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-0.150"
+                          max="0.200"
+                          step="0.005"
+                          value={vo}
+                          onChange={(e) => handleSliderChange("vo", parseFloat(e.target.value))}
+                          className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
+                        />
+                        <div className="flex justify-between text-[9px] font-mono text-muted-foreground mt-1">
+                          <span>Sur: -0.150</span>
+                          <span>Med: {modelData.feature_stats.vo.mean.toFixed(3)}</span>
+                          <span>Norte: 0.200</span>
                         </div>
                       </div>
 
@@ -1003,17 +1128,17 @@ export default function Dashboard() {
                         </div>
                         <input
                           type="range"
-                          min="-0.10"
-                          max="1.70"
+                          min="-0.30"
+                          max="1.00"
                           step="0.01"
                           value={sstAnomaly}
                           onChange={(e) => handleSliderChange("sst", parseFloat(e.target.value))}
                           className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
                         />
                         <div className="flex justify-between text-[9px] font-mono text-muted-foreground mt-1">
-                          <span>Frío: -0.10</span>
+                          <span>Frío: -0.30</span>
                           <span>Med: {modelData.feature_stats.sst_anomaly.mean.toFixed(2)}</span>
-                          <span>Cálido: 1.70</span>
+                          <span>Cálido: 1.00</span>
                         </div>
                       </div>
                     </div>
@@ -1222,9 +1347,9 @@ export default function Dashboard() {
                       <div className="grid sm:grid-cols-2 gap-4">
                         {/* NFAI Display Card */}
                         <div className="bg-background border border-border rounded-xl p-4 flex flex-col justify-center">
-                          <span className="text-[9px] font-mono uppercase text-muted-foreground mb-1">Índice NFAI Predicho</span>
+                          <span className="text-[9px] font-mono uppercase text-muted-foreground mb-1">Probabilidad de Arribazón</span>
                           <div className="text-2xl font-display font-black text-foreground">
-                            {predictedNfai.toFixed(4)}
+                            {(predictedNfai * 100).toFixed(1)}%
                           </div>
                         </div>
 
@@ -1254,8 +1379,8 @@ export default function Dashboard() {
                         </div>
                         <div className="flex justify-between text-[8px] font-mono text-muted-foreground mt-1.5">
                           <span>Bajo (0%)</span>
-                          <span>p50 (Medio)</span>
-                          <span>p80 (Alto)</span>
+                          <span>30% (Medio)</span>
+                          <span>60% (Alto)</span>
                           <span>Crítico (100%)</span>
                         </div>
                       </div>
@@ -1267,7 +1392,7 @@ export default function Dashboard() {
                           {contributions.map((c, i) => {
                             const val = c.value;
                             const isPositive = val >= 0;
-                            const widthPct = Math.min(100, (Math.abs(val) / 0.6) * 100);
+                            const widthPct = Math.min(100, (Math.abs(val) / 2.5) * 100);
                             return (
                               <div key={i} className="flex items-center gap-3">
                                 <span className="text-[11px] text-foreground font-medium w-24 flex-shrink-0 truncate">{c.name}</span>
@@ -1347,20 +1472,27 @@ export default function Dashboard() {
                     <h3 className="font-display text-base font-bold text-foreground">Fórmula e Interpretación</h3>
                   </div>
                   <div className="bg-background border border-border rounded-xl p-5 mb-5 text-center">
-                    <div className="text-xs font-mono text-muted-foreground mb-2">Ecuación de Regresión OLS</div>
-                    <div className="text-xs sm:text-sm font-mono font-bold text-primary overflow-x-auto whitespace-nowrap py-1">
-                      NFAI = {modelData.model.const.toFixed(4)} + ({modelData.model.po4.toFixed(4)} × PO₄) + ({modelData.model.uo.toFixed(4)} × Uo) + ({modelData.model.sst_anomaly.toFixed(4)} × SST_anom)
+                    <div className="text-xs font-mono text-muted-foreground mb-2">Ecuación de Regresión Logística (Logit)</div>
+                    <div className="text-xs sm:text-xs font-mono font-bold text-primary overflow-x-auto whitespace-nowrap py-1">
+                      p = 1 / (1 + e^-z)<br/>
+                      z = {modelData.model.const.toFixed(4)} + ({modelData.model.sst_anomaly.toFixed(4)} × SST_anom) + ({modelData.model.salinity.toFixed(4)} × Sal) + ({modelData.model.po4.toFixed(4)} × PO₄) + ({modelData.model.fe.toFixed(4)} × Fe) + ({modelData.model.uo.toFixed(4)} × Uo) + ({modelData.model.vo.toFixed(4)} × Vo)
                     </div>
                   </div>
                   <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
                     <p>
-                      <strong className="text-foreground">Fosfato (PO₄) ({modelData.model.po4.toFixed(2)}):</strong> Es el predictor con mayor peso positivo. El fósforo (nutriente agrícola) actúa como fertilizante del alga. Pequeñas alzas en su concentración provocan un crecimiento masivo.
+                      <strong className="text-foreground">Salinidad ({modelData.model.salinity.toFixed(2)}):</strong> Aporta fuertemente al riesgo. Modula la densidad del agua y la flotabilidad del sargazo, afectando su acumulación.
                     </p>
                     <p>
-                      <strong className="text-foreground">Corriente marina (Uo) ({modelData.model.uo.toFixed(2)}):</strong> Las corrientes positivas avanzan hacia el este. Dado que el sargazo avanza del este hacia el oeste en el Caribe, corrientes hacia el oeste más débiles (Uo menos negativo o positivo) alivian la acumulación costera local.
+                      <strong className="text-foreground">Fosfato (PO₄) ({modelData.model.po4.toFixed(2)}):</strong> Indica el efecto fertilizante limitante. En el modelo logit estandarizado actúa como regulador del crecimiento.
                     </p>
                     <p>
-                      <strong className="text-foreground">Anomalía de SST ({modelData.model.sst_anomaly.toFixed(2)}):</strong> El calentamiento superficial del agua por encima de la media histórica acelera la tasa metabólica y de duplicación del sargazo, incrementando el volumen flotante.
+                      <strong className="text-foreground">Hierro (Fe) ({modelData.model.fe.toFixed(2)}):</strong> Nutriente secundario que promueve la fotosíntesis del alga y acelera su duplicación.
+                    </p>
+                    <p>
+                      <strong className="text-foreground">Corrientes Zonal y Meridional (Uo/Vo) ({modelData.model.uo.toFixed(2)} / {modelData.model.vo.toFixed(2)}):</strong> Representan las componentes zonal (este-oeste) y meridional (norte-sur) del transporte físico del sargazo.
+                    </p>
+                    <p>
+                      <strong className="text-foreground">Anomalía de SST ({modelData.model.sst_anomaly.toFixed(2)}):</strong> Refleja el impacto de la temperatura del agua sobre la tasa metabólica del alga.
                     </p>
                   </div>
                 </div>
@@ -1376,35 +1508,29 @@ export default function Dashboard() {
                       <div className="text-2xl font-display font-black text-foreground">
                         {(modelData.metrics.r2 * 100).toFixed(1)}%
                       </div>
-                      <span className="text-[10px] font-mono uppercase text-muted-foreground">R² (Coef. de Det.)</span>
-                      <p className="text-[9px] text-muted-foreground mt-1">Variabilidad explicada por el modelo</p>
+                      <span className="text-[10px] font-mono uppercase text-muted-foreground">AUC-ROC (Área bajo Curva)</span>
+                      <p className="text-[9px] text-muted-foreground mt-1">Capacidad de discriminación de arribazones</p>
                     </div>
                     <div className="bg-background border border-border rounded-xl p-4">
                       <div className="text-2xl font-display font-black text-foreground">
-                        {modelData.metrics.mae_modelo.toFixed(4)}
+                        {modelData.metrics.mae_modelo.toFixed(2)}
                       </div>
-                      <span className="text-[10px] font-mono uppercase text-muted-foreground">MAE del Modelo</span>
-                      <p className="text-[9px] text-muted-foreground mt-1">Error absoluto medio de la predicción</p>
+                      <span className="text-[10px] font-mono uppercase text-muted-foreground">Log-Likelihood</span>
+                      <p className="text-[9px] text-muted-foreground mt-1">Logaritmo de verosimilitud del modelo</p>
                     </div>
                   </div>
                   <div className="space-y-3 text-xs text-muted-foreground leading-relaxed border-t border-border pt-4">
                     <div className="flex justify-between">
-                      <span>R² Ajustado:</span>
-                      <span className="font-mono font-bold text-foreground">{modelData.metrics.r2_adj.toFixed(3)}</span>
+                      <span>McFadden Pseudo R²:</span>
+                      <span className="font-mono font-bold text-foreground">{modelData.metrics.r2_adj.toFixed(4)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Mejora vs Baseline (Promedio):</span>
-                      <span className="font-mono font-bold text-emerald-500">+{modelData.metrics.mejora_pct.toFixed(1)}%</span>
+                      <span>LLR p-value (Significancia Global):</span>
+                      <span className="font-mono font-bold text-emerald-500">{modelData.metrics.f_stat.toExponential(4)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Observaciones mensuales (N):</span>
-                      <span className="font-mono font-bold text-foreground">{modelData.metrics.n_obs} meses</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>F-statistic (p-value):</span>
-                      <span className="font-mono font-bold text-foreground">
-                        {modelData.metrics.f_stat.toFixed(2)} ({modelData.metrics.f_pvalue.toFixed(4)})
-                      </span>
+                      <span>Observaciones Diarias (N):</span>
+                      <span className="font-mono font-bold text-foreground">{modelData.metrics.n_obs} días (2024-2026)</span>
                     </div>
                   </div>
                 </div>

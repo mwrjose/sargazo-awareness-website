@@ -9,7 +9,7 @@ DATA_DIR = APP_DIR / "data"
 REACT_DATA_PATH = APP_DIR.parent / "src" / "app" / "model_data.json"
 
 def main():
-    print("--- Iniciando entrenamiento del modelo predictivo (NFAI) ---")
+    print("--- Iniciando entrenamiento del modelo predictivo (Logit v2) ---")
     
     # 1. Intentar entrenar con los archivos .nc locales
     result = None

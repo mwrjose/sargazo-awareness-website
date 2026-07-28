@@ -1263,80 +1263,89 @@ export default function Dashboard() {
                           );
                         })}
 
-                        {/* Map Tooltip */}
-                        {(hoveredBeach || hoveredProvince) && mousePos && (() => {
-                          const beachData = hoveredBeach ? (modelData.playas as Record<string, any>)[hoveredBeach] : null;
-                          const isBeach = !!beachData;
-                          const isHoveredActive = hoveredBeach === selectedBeach;
-                          
-                          // Get prediction info for tooltip
-                          let label = "";
-                          let val = 0;
-                          let levelColor = "#1d8c7a";
-                          
-                          if (isBeach && hoveredBeach) {
-                            if (isHoveredActive) {
-                              val = predictedNfai;
-                              label = riskLevel.label;
-                              levelColor = riskLevel.pinColor;
-                            } else {
-                              const predInfo = beachPredictions[hoveredBeach];
-                              val = predInfo ? predInfo.nfai : 0;
-                              label = predInfo ? predInfo.risk.label : "";
-                              levelColor = predInfo ? predInfo.risk.pinColor : "#6fa9a0";
-                            }
-                          }
-                          
-                          const pData = !beachData ? PROVINCE_DATA.find(p => p.id === hoveredProvince) : null;
-                          const geoFeature = !beachData ? geoFeatures.find(f => {
-                            const id = GEO_NAME_MAP[f.properties.province_name];
-                            return id === hoveredProvince || f.properties.province_name === hoveredProvince;
-                          }) : null;
-
-                          const displayName = hoveredBeach ?? pData?.name ?? geoFeature?.properties.province_name ?? hoveredProvince ?? "";
-                          if (!isBeach && pData) {
-                            levelColor = LEVEL_COLORS[pData.level];
-                          }
-                          
-                          const maxChars = Math.max(
-                            displayName.length,
-                            isBeach ? (isHoveredActive && isManualMode ? 24 : 17) : 12,
-                            isBeach ? 25 : 22
-                          );
-                          const tw = Math.max(200, maxChars * 7.2 + 24);
-                          const th = isBeach ? 64 : pData ? 60 : 46;
-                          const tx = mousePos.x + tw > 468 ? mousePos.x - tw - 8 : mousePos.x + 10;
-                          const ty = mousePos.y + th > 328 ? mousePos.y - th - 8 : mousePos.y + 10;
-
-                          return (
-                            <g style={{ pointerEvents: "none" }}>
-                              <rect x={tx} y={ty} width={tw} height={th} rx={7}
-                                fill={isDark ? "#061c2e" : "#ffffff"} stroke={levelColor} strokeWidth={0.9} opacity={0.97} />
-                              <rect x={tx + 8} y={ty + 6} width={isBeach ? (isHoveredActive && isManualMode ? 116 : 82) : 48} height={12} rx={3}
-                                fill={levelColor} opacity={0.2} />
-                              <text x={tx + 12} y={ty + 15} fill={levelColor} fontSize={8} fontFamily="DM Mono" fontWeight={600}>
-                                {isBeach ? (isHoveredActive && isManualMode ? "PREDICCIÓN (SIMULACIÓN)" : "PREDICCIÓN PLAYA") : "PROVINCIA"}
-                              </text>
-                              <text x={tx + 8} y={ty + 30} fill={isDark ? "#dff0eb" : "#0f172a"} fontSize={10} fontFamily="DM Sans" fontWeight={600}>
-                                {displayName}
-                              </text>
-                              {isBeach && (
-                                <text x={tx + 8} y={ty + 45} fill={isDark ? "#6fa9a0" : "#475569"} fontSize={9} fontFamily="DM Mono">
-                                  Riesgo: {(val * 100).toFixed(1)}% ({label})
-                                </text>
-                              )}
-                              {!isBeach && pData && (
-                                <text x={tx + 8} y={ty + 45} fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={9} fontFamily="DM Mono">
-                                  {pData.impact},000 ton acumuladas
-                                </text>
-                              )}
-                            </g>
-                          );
-                        })()}
-
                         <text x={240} y={333} textAnchor="middle" fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={7} fontFamily="DM Mono" opacity={0.45}>República Dominicana</text>
                         <text x={16} y={195} textAnchor="middle" fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={7} fontFamily="DM Mono" opacity={0.35} transform="rotate(-90,16,195)">Haití</text>
                       </svg>
+
+                      {/* Map Tooltip (Floating Responsive HTML Div) */}
+                      {(hoveredBeach || hoveredProvince) && mousePos && (() => {
+                        const beachData = hoveredBeach ? (modelData.playas as Record<string, any>)[hoveredBeach] : null;
+                        const isBeach = !!beachData;
+                        const isHoveredActive = hoveredBeach === selectedBeach;
+                        
+                        let label = "";
+                        let val = 0;
+                        let levelColor = "#1d8c7a";
+                        
+                        if (isBeach && hoveredBeach) {
+                          if (isHoveredActive) {
+                            val = predictedNfai;
+                            label = riskLevel.label;
+                            levelColor = riskLevel.pinColor;
+                          } else {
+                            const predInfo = beachPredictions[hoveredBeach];
+                            val = predInfo ? predInfo.nfai : 0;
+                            label = predInfo ? predInfo.risk.label : "";
+                            levelColor = predInfo ? predInfo.risk.pinColor : "#6fa9a0";
+                          }
+                        }
+                        
+                        const pData = !beachData ? PROVINCE_DATA.find(p => p.id === hoveredProvince) : null;
+                        const geoFeature = !beachData ? geoFeatures.find(f => {
+                          const id = GEO_NAME_MAP[f.properties.province_name];
+                          return id === hoveredProvince || f.properties.province_name === hoveredProvince;
+                        }) : null;
+
+                        const displayName = hoveredBeach ?? pData?.name ?? geoFeature?.properties.province_name ?? hoveredProvince ?? "";
+                        if (!isBeach && pData) {
+                          levelColor = LEVEL_COLORS[pData.level];
+                        }
+
+                        // Determine tooltip position
+                        const leftPct = (mousePos.x / 480) * 100;
+                        const topPct = (mousePos.y / 340) * 100;
+                        
+                        // Shift tooltip so it doesn't get cut off at the right/bottom edge
+                        const isRightSide = leftPct > 65;
+                        const isBottomSide = topPct > 70;
+                        
+                        const style: React.CSSProperties = {
+                          position: "absolute",
+                          left: `${leftPct}%`,
+                          top: `${topPct}%`,
+                          transform: `translate(${isRightSide ? "-105%" : "12px"}, ${isBottomSide ? "-105%" : "12px"})`,
+                          pointerEvents: "none",
+                          zIndex: 50,
+                          borderColor: levelColor
+                        };
+
+                        return (
+                          <div 
+                            style={style}
+                            className="bg-card/95 border backdrop-blur-sm rounded-xl p-3 shadow-xl min-w-[180px] max-w-[280px] transition-all duration-75 text-left"
+                          >
+                            <span 
+                              style={{ color: levelColor }}
+                              className="text-[9px] font-mono font-bold tracking-wider uppercase px-2 py-0.5 bg-muted/40 rounded border border-border/20 inline-block mb-1.5"
+                            >
+                              {isBeach ? (isHoveredActive && isManualMode ? "SIMULACIÓN" : "PLAYA") : "PROVINCIA"}
+                            </span>
+                            <h4 className="text-xs font-display font-bold text-foreground truncate mb-1">
+                              {displayName}
+                            </h4>
+                            {isBeach && (
+                              <p className="text-[10px] font-mono text-muted-foreground">
+                                Riesgo: <span className="font-bold text-foreground">{(val * 100).toFixed(1)}%</span> ({label})
+                              </p>
+                            )}
+                            {!isBeach && pData && (
+                              <p className="text-[10px] font-mono text-muted-foreground">
+                                Acumulado: <span className="font-bold text-foreground">{pData.impact},000 ton</span>
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 

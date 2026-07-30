@@ -433,6 +433,30 @@ export default function Dashboard() {
     return Math.max(0, Math.min(100, predictedNfai * 100));
   }, [predictedNfai]);
 
+  // Live simulation value scaled and mapped to OLS scale for chart comparison
+  const historicalDataWithSim = useMemo(() => {
+    // Inverse mapping of new PO4 back to old OLS PO4 scale
+    const oldMin = 0.00126;
+    const oldMax = 0.02125;
+    const newMin = 0.641761;
+    const newMax = 0.694784;
+    const ratio = (po4 - newMin) / (newMax - newMin);
+    const oldPo4 = oldMin + ratio * (oldMax - oldMin);
+    
+    // OLS Equation: NFAI = -0.5436 + 4.9590 * PO4_old + 0.1477 * Uo + 0.0642 * SST_anomalia
+    const simulatedOlsNfai = -0.5436 + 4.9590 * oldPo4 + 0.1477 * uo + 0.0642 * sstAnomaly;
+
+    return modelData.historical.map((item, idx) => {
+      if (idx === modelData.historical.length - 1) {
+        return {
+          ...item,
+          nfai_sim: simulatedOlsNfai
+        };
+      }
+      return item;
+    });
+  }, [po4, uo, sstAnomaly]);
+
   // Contributions list
   const contributions = useMemo(() => {
     const { model, feature_stats } = modelData;
@@ -1487,7 +1511,7 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <ResponsiveContainer width="100%" height={260}>
-                  <LineChart data={modelData.historical} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                  <LineChart data={historicalDataWithSim} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                     <XAxis 
                       dataKey="time" 
@@ -1506,11 +1530,15 @@ export default function Dashboard() {
                         const d = new Date(v + "T00:00:00");
                         return isNaN(d.getTime()) ? v : `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
                       }}
-                      formatter={(v: any, name: string) => [v ? v.toFixed(4) : "Sin datos", name === "nfai" ? "NFAI Observado" : "NFAI Predicho"]} 
+                      formatter={(v: any, name: string) => [
+                        v ? v.toFixed(4) : "Sin datos", 
+                        name === "nfai" ? "NFAI Observado" : name === "nfai_pred" ? "NFAI Predicho" : "Tu Simulación OLS"
+                      ]} 
                     />
                     <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: "12px", fontFamily: "var(--font-sans)" }} />
                     <Line name="nfai" type="monotone" dataKey="nfai" stroke="var(--color-accent)" strokeWidth={2.5} dot={{ fill: "var(--color-accent)", r: 3.5, strokeWidth: 0 }} connectNulls={false} activeDot={{ r: 6 }} />
                     <Line name="nfai_pred" type="monotone" dataKey="nfai_pred" stroke="var(--color-primary)" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={{ r: 5 }} />
+                    <Line name="nfai_sim" type="monotone" dataKey="nfai_sim" stroke="#f43f5e" strokeWidth={0} dot={{ fill: "#f43f5e", r: 6.5, strokeWidth: 2, stroke: "#ffffff" }} activeDot={{ r: 8 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>

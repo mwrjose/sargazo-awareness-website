@@ -154,6 +154,156 @@ const tooltipStyle = {
   boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)"
 };
 
+interface MapTooltipProps {
+  hoveredBeach: string | null;
+  hoveredProvince: string | null;
+  mousePos: { x: number; y: number } | null;
+  isDark: boolean;
+  isSimulator: boolean;
+  selectedBeach?: string;
+  isManualMode?: boolean;
+  modelData: any;
+  geoFeatures: any[];
+  predictedNfai?: number;
+  riskLevel?: any;
+  beachPredictions?: any;
+}
+
+const MapTooltip: React.FC<MapTooltipProps> = ({
+  hoveredBeach,
+  hoveredProvince,
+  mousePos,
+  isDark,
+  isSimulator,
+  selectedBeach = "",
+  isManualMode = false,
+  modelData,
+  geoFeatures,
+  predictedNfai = 0,
+  riskLevel = null,
+  beachPredictions = {}
+}) => {
+  if ((!hoveredBeach && !hoveredProvince) || !mousePos) return null;
+
+  let displayName = "";
+  let levelColor = "#1d8c7a";
+  let content: React.ReactNode = null;
+  let labelType = "PROVINCIA";
+
+  if (isSimulator) {
+    const beachData = hoveredBeach ? (modelData.playas as Record<string, any>)[hoveredBeach] : null;
+    const isBeach = !!beachData;
+    const isHoveredActive = hoveredBeach === selectedBeach;
+    labelType = isBeach ? (isHoveredActive && isManualMode ? "SIMULACIÓN" : "PLAYA") : "PROVINCIA";
+
+    let label = "";
+    let val = 0;
+
+    if (isBeach && hoveredBeach) {
+      if (isHoveredActive && riskLevel) {
+        val = predictedNfai;
+        label = riskLevel.label;
+        levelColor = riskLevel.pinColor;
+      } else {
+        const predInfo = beachPredictions[hoveredBeach];
+        val = predInfo ? predInfo.nfai : 0;
+        label = predInfo ? predInfo.risk.label : "";
+        levelColor = predInfo ? predInfo.risk.pinColor : "#6fa9a0";
+      }
+    }
+
+    const pData = !beachData ? PROVINCE_DATA.find(p => p.id === hoveredProvince) : null;
+    const geoFeature = !beachData ? geoFeatures.find(f => {
+      const id = GEO_NAME_MAP[f.properties.province_name];
+      return id === hoveredProvince || f.properties.province_name === hoveredProvince;
+    }) : null;
+
+    displayName = hoveredBeach ?? pData?.name ?? geoFeature?.properties.province_name ?? hoveredProvince ?? "";
+    if (!isBeach && pData) {
+      levelColor = LEVEL_COLORS[pData.level];
+    }
+
+    content = (
+      <>
+        {isBeach && (
+          <p className="text-[10px] font-mono text-muted-foreground">
+            Riesgo: <span className="font-bold text-foreground">{(val * 100).toFixed(1)}%</span> ({label})
+          </p>
+        )}
+        {!isBeach && pData && (
+          <p className="text-[10px] font-mono text-muted-foreground">
+            Acumulado: <span className="font-bold text-foreground">{pData.impact},000 ton</span>
+          </p>
+        )}
+      </>
+    );
+  } else {
+    const beach = hoveredBeach ? DR_BEACHES.find(b => b.id === hoveredBeach) : null;
+    const pData = !beach ? PROVINCE_DATA.find(p => p.id === hoveredProvince) : null;
+    const geoFeature = !beach ? geoFeatures.find(f => {
+      const id = GEO_NAME_MAP[f.properties.province_name];
+      return id === hoveredProvince || f.properties.province_name === hoveredProvince;
+    }) : null;
+
+    const isBeach = !!beach;
+    labelType = isBeach ? "PLAYA" : "PROVINCIA";
+    displayName = beach?.name ?? pData?.name ?? geoFeature?.properties.province_name ?? hoveredProvince ?? "";
+    const level = beach?.level ?? pData?.level ?? 0;
+    levelColor = level > 0 ? LEVEL_COLORS[level] : "#1d8c7a";
+
+    content = (
+      <div className="space-y-1 text-[10px] font-mono text-muted-foreground">
+        {isBeach && <p className="text-emerald-500 font-semibold">Alerta de sargazo activa</p>}
+        {!isBeach && pData && (
+          <p>Acumulado: <span className="font-bold text-foreground">{pData.impact},000 ton</span></p>
+        )}
+        {(isBeach || pData) && (
+          <p className="flex items-center gap-1.5">
+            <span style={{ backgroundColor: levelColor }} className="w-1.5 h-1.5 rounded-full inline-block" />
+            <span className="font-bold text-foreground">{LEVEL_LABELS[level]}</span> · Nivel {level}/5
+          </p>
+        )}
+        {!isBeach && !pData && (
+          <p className="italic">Sin datos de impacto</p>
+        )}
+      </div>
+    );
+  }
+
+  const leftPct = (mousePos.x / 480) * 100;
+  const topPct = (mousePos.y / 340) * 100;
+  const isRightSide = leftPct > 65;
+  const isBottomSide = topPct > 70;
+
+  const style: React.CSSProperties = {
+    position: "absolute",
+    left: `${leftPct}%`,
+    top: `${topPct}%`,
+    transform: `translate(${isRightSide ? "-105%" : "12px"}, ${isBottomSide ? "-105%" : "12px"})`,
+    pointerEvents: "none",
+    zIndex: 50,
+    borderColor: levelColor
+  };
+
+  return (
+    <div 
+      style={style}
+      className="bg-card/95 border backdrop-blur-sm rounded-xl p-3 shadow-xl min-w-[180px] max-w-[280px] transition-all duration-75 text-left"
+    >
+      <span 
+        style={{ color: levelColor }}
+        className="text-[9px] font-mono font-bold tracking-wider uppercase px-2 py-0.5 bg-muted/40 rounded border border-border/20 inline-block mb-1.5"
+      >
+        {labelType}
+      </span>
+      <h4 className="text-xs font-display font-bold text-foreground truncate mb-1">
+        {displayName}
+      </h4>
+      {content}
+    </div>
+  );
+};
+
 export default function Dashboard() {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme !== "light";
@@ -794,80 +944,15 @@ export default function Dashboard() {
                   </svg>
 
                   {/* Map Tooltip (Floating Responsive HTML Div) */}
-                  {(hoveredBeach || hoveredProvince) && mousePos && (() => {
-                    const beach = hoveredBeach ? DR_BEACHES.find(b => b.id === hoveredBeach) : null;
-                    const pData = !beach ? PROVINCE_DATA.find(p => p.id === hoveredProvince) : null;
-                    const geoFeature = !beach ? geoFeatures.find(f => {
-                      const id = GEO_NAME_MAP[f.properties.province_name];
-                      return id === hoveredProvince || f.properties.province_name === hoveredProvince;
-                    }) : null;
-
-                    const isBeach = !!beach;
-                    const displayName = beach?.name ?? pData?.name ?? geoFeature?.properties.province_name ?? hoveredProvince ?? "";
-                    const level = beach?.level ?? pData?.level ?? 0;
-                    const color = level > 0 ? LEVEL_COLORS[level] : "#1d8c7a";
-
-                    // Determine tooltip position
-                    const leftPct = (mousePos.x / 480) * 100;
-                    const topPct = (mousePos.y / 340) * 100;
-                    
-                    // Shift tooltip so it doesn't get cut off at the right/bottom edge
-                    const isRightSide = leftPct > 65;
-                    const isBottomSide = topPct > 70;
-                    
-                    const style: React.CSSProperties = {
-                      position: "absolute",
-                      left: `${leftPct}%`,
-                      top: `${topPct}%`,
-                      transform: `translate(${isRightSide ? "-105%" : "12px"}, ${isBottomSide ? "-105%" : "12px"})`,
-                      pointerEvents: "none",
-                      zIndex: 50,
-                      borderColor: color
-                    };
-
-                    return (
-                      <div 
-                        style={style}
-                        className="bg-card/95 border backdrop-blur-sm rounded-xl p-3 shadow-xl min-w-[180px] max-w-[280px] transition-all duration-75 text-left"
-                      >
-                        <span 
-                          style={{ color }}
-                          className="text-[9px] font-mono font-bold tracking-wider uppercase px-2 py-0.5 bg-muted/40 rounded border border-border/20 inline-block mb-1.5"
-                        >
-                          {isBeach ? "PLAYA" : "PROVINCIA"}
-                        </span>
-                        <h4 className="text-xs font-display font-bold text-foreground truncate mb-1">
-                          {displayName}
-                        </h4>
-                        
-                        {isBeach && (
-                          <div className="space-y-1 text-[10px] font-mono text-muted-foreground">
-                            <p className="text-emerald-500 font-semibold">Alerta de sargazo activa</p>
-                            <p className="flex items-center gap-1.5">
-                              <span style={{ backgroundColor: color }} className="w-1.5 h-1.5 rounded-full inline-block" />
-                              <span className="font-bold text-foreground">{LEVEL_LABELS[level]}</span> · Nivel {level}/5
-                            </p>
-                          </div>
-                        )}
-
-                        {!isBeach && pData && (
-                          <div className="space-y-1 text-[10px] font-mono text-muted-foreground">
-                            <p>Acumulado: <span className="font-bold text-foreground">{pData.impact},000 ton</span></p>
-                            <p className="flex items-center gap-1.5">
-                              <span style={{ backgroundColor: color }} className="w-1.5 h-1.5 rounded-full inline-block" />
-                              <span className="font-bold text-foreground">{LEVEL_LABELS[level]}</span> · Nivel {level}/5
-                            </p>
-                          </div>
-                        )}
-
-                        {!isBeach && !pData && (
-                          <p className="text-[10px] font-mono text-muted-foreground italic">
-                            Sin datos de impacto
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  <MapTooltip
+                    hoveredBeach={hoveredBeach}
+                    hoveredProvince={hoveredProvince}
+                    mousePos={mousePos}
+                    isDark={isDark}
+                    isSimulator={false}
+                    modelData={modelData}
+                    geoFeatures={geoFeatures}
+                  />
                 </div>
               </div>
 
@@ -1285,84 +1370,20 @@ export default function Dashboard() {
                       </svg>
 
                       {/* Map Tooltip (Floating Responsive HTML Div) */}
-                      {(hoveredBeach || hoveredProvince) && mousePos && (() => {
-                        const beachData = hoveredBeach ? (modelData.playas as Record<string, any>)[hoveredBeach] : null;
-                        const isBeach = !!beachData;
-                        const isHoveredActive = hoveredBeach === selectedBeach;
-                        
-                        let label = "";
-                        let val = 0;
-                        let levelColor = "#1d8c7a";
-                        
-                        if (isBeach && hoveredBeach) {
-                          if (isHoveredActive) {
-                            val = predictedNfai;
-                            label = riskLevel.label;
-                            levelColor = riskLevel.pinColor;
-                          } else {
-                            const predInfo = beachPredictions[hoveredBeach];
-                            val = predInfo ? predInfo.nfai : 0;
-                            label = predInfo ? predInfo.risk.label : "";
-                            levelColor = predInfo ? predInfo.risk.pinColor : "#6fa9a0";
-                          }
-                        }
-                        
-                        const pData = !beachData ? PROVINCE_DATA.find(p => p.id === hoveredProvince) : null;
-                        const geoFeature = !beachData ? geoFeatures.find(f => {
-                          const id = GEO_NAME_MAP[f.properties.province_name];
-                          return id === hoveredProvince || f.properties.province_name === hoveredProvince;
-                        }) : null;
-
-                        const displayName = hoveredBeach ?? pData?.name ?? geoFeature?.properties.province_name ?? hoveredProvince ?? "";
-                        if (!isBeach && pData) {
-                          levelColor = LEVEL_COLORS[pData.level];
-                        }
-
-                        // Determine tooltip position
-                        const leftPct = (mousePos.x / 480) * 100;
-                        const topPct = (mousePos.y / 340) * 100;
-                        
-                        // Shift tooltip so it doesn't get cut off at the right/bottom edge
-                        const isRightSide = leftPct > 65;
-                        const isBottomSide = topPct > 70;
-                        
-                        const style: React.CSSProperties = {
-                          position: "absolute",
-                          left: `${leftPct}%`,
-                          top: `${topPct}%`,
-                          transform: `translate(${isRightSide ? "-105%" : "12px"}, ${isBottomSide ? "-105%" : "12px"})`,
-                          pointerEvents: "none",
-                          zIndex: 50,
-                          borderColor: levelColor
-                        };
-
-                        return (
-                          <div 
-                            style={style}
-                            className="bg-card/95 border backdrop-blur-sm rounded-xl p-3 shadow-xl min-w-[180px] max-w-[280px] transition-all duration-75 text-left"
-                          >
-                            <span 
-                              style={{ color: levelColor }}
-                              className="text-[9px] font-mono font-bold tracking-wider uppercase px-2 py-0.5 bg-muted/40 rounded border border-border/20 inline-block mb-1.5"
-                            >
-                              {isBeach ? (isHoveredActive && isManualMode ? "SIMULACIÓN" : "PLAYA") : "PROVINCIA"}
-                            </span>
-                            <h4 className="text-xs font-display font-bold text-foreground truncate mb-1">
-                              {displayName}
-                            </h4>
-                            {isBeach && (
-                              <p className="text-[10px] font-mono text-muted-foreground">
-                                Riesgo: <span className="font-bold text-foreground">{(val * 100).toFixed(1)}%</span> ({label})
-                              </p>
-                            )}
-                            {!isBeach && pData && (
-                              <p className="text-[10px] font-mono text-muted-foreground">
-                                Acumulado: <span className="font-bold text-foreground">{pData.impact},000 ton</span>
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })()}
+                      <MapTooltip
+                        hoveredBeach={hoveredBeach}
+                        hoveredProvince={hoveredProvince}
+                        mousePos={mousePos}
+                        isDark={isDark}
+                        isSimulator={true}
+                        selectedBeach={selectedBeach}
+                        isManualMode={isManualMode}
+                        modelData={modelData}
+                        geoFeatures={geoFeatures}
+                        predictedNfai={predictedNfai}
+                        riskLevel={riskLevel}
+                        beachPredictions={beachPredictions}
+                      />
                     </div>
                   </div>
 

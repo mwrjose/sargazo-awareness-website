@@ -1285,10 +1285,10 @@ export default function Dashboard() {
                 <div className="lg:col-span-3 space-y-6 flex flex-col justify-between">
                   
                   {/* SVG MAP with Beach Pins */}
-                  <div className="bg-card border border-border rounded-2xl p-6 relative">
-                    <div className="absolute top-6 left-6 z-10">
+                  <div className="bg-card border border-border rounded-2xl p-6">
+                    <div className="mb-5">
                       <h2 className="font-display text-sm font-bold text-foreground">Distribución Geográfica de Playas</h2>
-                      <p className="text-[10px] text-muted-foreground">El pin seleccionado reacciona en tiempo real a los sliders</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">El pin seleccionado reacciona en tiempo real a los sliders</p>
                     </div>
 
                     <div className="relative w-full" style={{ paddingBottom: "70.83%" }}>

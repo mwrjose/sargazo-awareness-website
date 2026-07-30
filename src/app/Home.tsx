@@ -224,10 +224,6 @@ export default function Home() {
         </div>
         <div className="relative max-w-7xl mx-auto px-6 w-full">
           <div className="max-w-3xl">
-            <span className="inline-flex items-center gap-2 text-accent text-xs font-mono tracking-widest uppercase mb-8 border border-accent/30 px-3 py-1.5 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-              República Dominicana · Monitoreo 2024
-            </span>
             <h1 className="font-display text-5xl sm:text-7xl md:text-8xl font-bold leading-[1.05] mb-6 text-foreground">
               El Sargazo<br /><span className="text-primary italic">nos afecta</span><br />a todos
             </h1>

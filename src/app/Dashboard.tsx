@@ -789,68 +789,85 @@ export default function Dashboard() {
                       );
                     })}
 
-                    {(hoveredBeach || hoveredProvince) && mousePos && (() => {
-                      const beach = hoveredBeach ? DR_BEACHES.find(b => b.id === hoveredBeach) : null;
-                      const pData = !beach ? PROVINCE_DATA.find(p => p.id === hoveredProvince) : null;
-                      const geoFeature = !beach ? geoFeatures.find(f => {
-                        const id = GEO_NAME_MAP[f.properties.province_name];
-                        return id === hoveredProvince || f.properties.province_name === hoveredProvince;
-                      }) : null;
-
-                      const isBeach = !!beach;
-                      const displayName = beach?.name ?? pData?.name ?? geoFeature?.properties.province_name ?? hoveredProvince ?? "";
-                      const level = beach?.level ?? pData?.level ?? 0;
-                      const color = level > 0 ? LEVEL_COLORS[level] : "#1d8c7a";
-                      const tw = 148, th = isBeach ? 58 : pData ? 54 : 32;
-                      const tx = mousePos.x + tw > 468 ? mousePos.x - tw - 8 : mousePos.x + 10;
-                      const ty = mousePos.y + th > 328 ? mousePos.y - th - 8 : mousePos.y + 10;
-
-                      return (
-                        <g style={{ pointerEvents: "none" }}>
-                          <rect x={tx} y={ty} width={tw} height={th} rx={7}
-                            fill={isDark ? "#061c2e" : "#ffffff"} stroke={color} strokeWidth={0.9} opacity={0.97} />
-                          <rect x={tx + 8} y={ty + 6} width={isBeach ? 34 : 46} height={12} rx={3}
-                            fill={color} opacity={0.2} />
-                          <text x={tx + 12} y={ty + 15} fill={color} fontSize={8} fontFamily="DM Mono" fontWeight={600}>
-                            {isBeach ? "PLAYA" : "PROVINCIA"}
-                          </text>
-                          <text x={tx + 8} y={ty + 30} fill={isDark ? "#dff0eb" : "#0f172a"} fontSize={10} fontFamily="DM Sans" fontWeight={600}>
-                            {displayName}
-                          </text>
-                          {isBeach && beach && (
-                            <text x={tx + 8} y={ty + 43} fill={isDark ? "#6fa9a0" : "#475569"} fontSize={9} fontFamily="DM Mono">
-                              Alerta de sargazo activa
-                            </text>
-                          )}
-                          {isBeach && beach && (
-                            <>
-                              <circle cx={tx + 10} cy={ty + 52} r={3.5} fill={color} opacity={0.85} />
-                              <text x={tx + 18} y={ty + 55} fill={color} fontSize={8.5} fontFamily="DM Mono">
-                                {LEVEL_LABELS[level]} · Nivel {level}/5
-                              </text>
-                            </>
-                          )}
-                          {!isBeach && pData && (
-                            <>
-                              <text x={tx + 8} y={ty + 43} fill={isDark ? "#6fa9a0" : "#475569"} fontSize={9} fontFamily="DM Mono">
-                                {pData.impact},000 ton acumuladas
-                              </text>
-                              <circle cx={tx + 10} cy={ty + 52} r={3.5} fill={color} opacity={0.85} />
-                              <text x={tx + 18} y={ty + 55} fill={color} fontSize={8.5} fontFamily="DM Mono">
-                                {LEVEL_LABELS[level]} · Nivel {level}/5
-                              </text>
-                            </>
-                          )}
-                          {!isBeach && !pData && (
-                            <text x={tx + 8} y={ty + 43} fill={isDark ? "#6fa9a0" : "#475569"} fontSize={9} fontFamily="DM Mono">Sin datos de impacto</text>
-                          )}
-                        </g>
-                      );
-                    })()}
-
                     <text x={240} y={333} textAnchor="middle" fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={7} fontFamily="DM Mono" opacity={0.45}>República Dominicana</text>
                     <text x={16} y={195} textAnchor="middle" fill={isDark ? "#6fa9a0" : "#5e7a6f"} fontSize={7} fontFamily="DM Mono" opacity={0.35} transform="rotate(-90,16,195)">Haití</text>
                   </svg>
+
+                  {/* Map Tooltip (Floating Responsive HTML Div) */}
+                  {(hoveredBeach || hoveredProvince) && mousePos && (() => {
+                    const beach = hoveredBeach ? DR_BEACHES.find(b => b.id === hoveredBeach) : null;
+                    const pData = !beach ? PROVINCE_DATA.find(p => p.id === hoveredProvince) : null;
+                    const geoFeature = !beach ? geoFeatures.find(f => {
+                      const id = GEO_NAME_MAP[f.properties.province_name];
+                      return id === hoveredProvince || f.properties.province_name === hoveredProvince;
+                    }) : null;
+
+                    const isBeach = !!beach;
+                    const displayName = beach?.name ?? pData?.name ?? geoFeature?.properties.province_name ?? hoveredProvince ?? "";
+                    const level = beach?.level ?? pData?.level ?? 0;
+                    const color = level > 0 ? LEVEL_COLORS[level] : "#1d8c7a";
+
+                    // Determine tooltip position
+                    const leftPct = (mousePos.x / 480) * 100;
+                    const topPct = (mousePos.y / 340) * 100;
+                    
+                    // Shift tooltip so it doesn't get cut off at the right/bottom edge
+                    const isRightSide = leftPct > 65;
+                    const isBottomSide = topPct > 70;
+                    
+                    const style: React.CSSProperties = {
+                      position: "absolute",
+                      left: `${leftPct}%`,
+                      top: `${topPct}%`,
+                      transform: `translate(${isRightSide ? "-105%" : "12px"}, ${isBottomSide ? "-105%" : "12px"})`,
+                      pointerEvents: "none",
+                      zIndex: 50,
+                      borderColor: color
+                    };
+
+                    return (
+                      <div 
+                        style={style}
+                        className="bg-card/95 border backdrop-blur-sm rounded-xl p-3 shadow-xl min-w-[180px] max-w-[280px] transition-all duration-75 text-left"
+                      >
+                        <span 
+                          style={{ color }}
+                          className="text-[9px] font-mono font-bold tracking-wider uppercase px-2 py-0.5 bg-muted/40 rounded border border-border/20 inline-block mb-1.5"
+                        >
+                          {isBeach ? "PLAYA" : "PROVINCIA"}
+                        </span>
+                        <h4 className="text-xs font-display font-bold text-foreground truncate mb-1">
+                          {displayName}
+                        </h4>
+                        
+                        {isBeach && (
+                          <div className="space-y-1 text-[10px] font-mono text-muted-foreground">
+                            <p className="text-emerald-500 font-semibold">Alerta de sargazo activa</p>
+                            <p className="flex items-center gap-1.5">
+                              <span style={{ backgroundColor: color }} className="w-1.5 h-1.5 rounded-full inline-block" />
+                              <span className="font-bold text-foreground">{LEVEL_LABELS[level]}</span> · Nivel {level}/5
+                            </p>
+                          </div>
+                        )}
+
+                        {!isBeach && pData && (
+                          <div className="space-y-1 text-[10px] font-mono text-muted-foreground">
+                            <p>Acumulado: <span className="font-bold text-foreground">{pData.impact},000 ton</span></p>
+                            <p className="flex items-center gap-1.5">
+                              <span style={{ backgroundColor: color }} className="w-1.5 h-1.5 rounded-full inline-block" />
+                              <span className="font-bold text-foreground">{LEVEL_LABELS[level]}</span> · Nivel {level}/5
+                            </p>
+                          </div>
+                        )}
+
+                        {!isBeach && !pData && (
+                          <p className="text-[10px] font-mono text-muted-foreground italic">
+                            Sin datos de impacto
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 

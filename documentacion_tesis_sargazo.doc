@@ -1,0 +1,148 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Documentación Tesis</title>
+  <style>
+    body {
+      font-family: 'Calibri', 'Arial', sans-serif;
+      line-height: 1.6;
+      color: #333333;
+      margin: 40px;
+    }
+    h1 {
+      font-family: 'Garamond', 'Georgia', serif;
+      color: #1b365d;
+      font-size: 24pt;
+      border-bottom: 2px solid #1b365d;
+      padding-bottom: 5px;
+      margin-top: 30px;
+    }
+    h2 {
+      font-family: 'Garamond', 'Georgia', serif;
+      color: #2e5b88;
+      font-size: 18pt;
+      margin-top: 25px;
+    }
+    h3 {
+      font-family: 'Calibri', sans-serif;
+      color: #555555;
+      font-size: 14pt;
+      margin-top: 20px;
+    }
+    p {
+      font-size: 11pt;
+      text-align: justify;
+      margin-bottom: 12px;
+    }
+    ul {
+      margin-bottom: 12px;
+    }
+    li {
+      font-size: 11pt;
+      margin-bottom: 6px;
+    }
+    .equation {
+      background-color: #f5f7fa;
+      border-left: 4px solid #1b365d;
+      padding: 10px 15px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-weight: bold;
+      text-align: center;
+      margin: 20px auto;
+      max-width: 90%;
+    }
+    hr {
+      border: 0;
+      border-top: 1px solid #dddddd;
+      margin: 35px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Proyecto Sargazord: Sistema de Alerta Temprana y Modelado Predictivo de Sargazo en la República Dominicana</h1>
+<h2>Introducción: La Invasión Dorada y la Necesidad de Actuar</h2>
+<p>Desde el año 2011, las costas del Mar Caribe han enfrentado un fenómeno sin precedentes: la llegada masiva y recurrente de enormes balsas de sargazo pelágico (*Sargassum fluitans* y *Sargassum natans*). Lo que antes era un componente saludable de los ecosistemas oceánicos se ha convertido en una marea dorada que sofoca los arrecifes de coral, destruye las praderas de pastos marinos y provoca desastres económicos multimillonarios en el sector turístico de la República Dominicana, afectando directamente a destinos clave como Punta Cana, Bávaro, Macao, Uvero Alto y La Romana.</p>
+<p>Cuando el sargazo llega a la costa y se descompone, libera gases tóxicos como el sulfuro de hidrógeno (H<sub>2</sub>S) y el amoníaco (NH<sub>3</sub>), ahuyentando a los visitantes y creando riesgos de salud pública.</p>
+<p>Ante esta crisis, la pregunta fundamental que inspiró este proyecto fue: <strong>¿Cómo podemos adelantarnos a la llegada del sargazo para que las brigadas de limpieza y los sistemas de barreras flotantes puedan actuar de manera preventiva y no reactiva?</strong></p>
+<p>Para responder a esto, nació <strong>Sargazord</strong>: un ecosistema tecnológico que integra datos satelitales, variables oceanográficas en tiempo real y modelos de aprendizaje automático para predecir el nivel de riesgo de arribazón en las costas dominicanas.</p>
+<hr />
+<h2>1. El Origen (Versión 1): El Índice NFAI y la Regresión Lineal</h2>
+<p>El proyecto comenzó con una hipótesis simple: <strong>El crecimiento y transporte del sargazo están dictados por las condiciones del océano</strong>.</p>
+<h3>El Qué y el Por Qué de la V1</h3>
+<p>Para cuantificar la presencia de sargazo desde el espacio, utilizamos el <strong>NFAI</strong> (*Normalized Floating Algae Index*), un índice espectral derivado de sensores satelitales que detecta la firma de reflectancia de la vegetación flotante. Recopilamos datos históricos del servicio de monitoreo marino de la Unión Europea (<strong>CMEMS</strong>) junto con tres variables que la literatura científica señalaba como los principales motores del fenómeno:</p>
+<p>1.  <strong>Fosfato (PO<sub>4</sub>):</strong> El nutriente limitante que actúa como fertilizante del alga.</p>
+<p>2.  <strong>Anomalía de la Temperatura Superficial del Mar (SST Anomalía):</strong> Un aumento en la temperatura acelera el metabolismo y la duplicación del sargazo.</p>
+<p>3.  <strong>Corriente Marina Zonal (U<sub>o</sub>):</strong> La componente de velocidad este-oeste que transporta físicamente el sargazo hacia nuestras costas.</p>
+<p>Con estos datos, entrenamos un modelo de <strong>Regresión Lineal Ordinaria (OLS)</strong>, cuya ecuación resultante fue:</p>
+<p class="equation">NFAI = -0.5436 + 4.9590 &bull; PO<sub>4</sub> + 0.1477 &bull; U<sub>o</sub> + 0.0642 &bull; SST Anomalía</p>
+<h3>Ajuste del Modelo OLS: Predicho vs. Observado</h3>
+<p>Para evaluar la precisión de la <strong>Versión 1</strong>, comparamos directamente los valores del índice NFAI predichos por la ecuación lineal frente a los valores reales observados por el satélite.</p>
+<p>El modelo OLS alcanzó una significancia estadística moderada con un coeficiente de determinación <strong>R<sup>2</sup> = 0.461</strong> (y un R<sup>2</sup> ajustado = 0.458). Esto nos indica que las variaciones en el fosfato, las corrientes zonales y la temperatura superficial explican aproximadamente el <strong>46.1% de la variabilidad histórica del sargazo</strong> en la zona.</p>
+<p>Sin embargo, al graficar el ajuste de <strong>Predicho vs. Observado</strong>, observamos deficiencias estructurales críticas:</p>
+<ul>
+  <li><strong>Subestimación de Picos Extremos:</strong> Durante los eventos de máxima arribazón (blooms masivos), los valores reales de NFAI se disparaban de forma exponencial debido al rápido crecimiento biológico del alga. Al ser un modelo estrictamente lineal, el OLS no pudo capturar este comportamiento exponencial, subestimando gravemente los picos de mayor riesgo (el modelo predecía un aumento moderado de NFAI mientras que la costa se inundaba de sargazo).</li>
+  <li><strong>Predicciones Negativas Absurdas:</strong> En temporadas frías o de bajos nutrientes, el NFAI observado se mantenía en un nivel plano cercano a cero. La naturaleza lineal del modelo forzaba la predicción a valores negativos abstractos e inexistentes en la realidad física, creando confusión en la lectura del índice.</li>
+  <li><strong>Distribución de Residuos:</strong> Los residuos (diferencia entre el valor real y el predicho) no seguían una distribución homogénea (heterocedasticidad), concentrándose en los extremos de nulo sargazo o arribazón extrema, evidenciando que la relación real entre el océano y el sargazo no es lineal.</li>
+</ul>
+<h3>La Lección Aprendida</h3>
+<p>Aunque el modelo lineal arrojó una significancia estadística aceptable ($R^2 = 0.461$), nos enfrentamos a un problema práctico de comunicación científica en el mundo real:</p>
+<ul>
+  <li>  <strong>Dificultad de interpretación:</strong> Para un hotelero, un pescador o un tomador de decisiones del gobierno, que el modelo prediga un "NFAI de $-0.485$" no significa nada. Es un índice abstracto, ruidoso y difícil de traducir en decisiones operativas (¿Debo desplegar las redes hoy o no?).</li>
+  <li>  <strong>Ruido diario y escala temporal:</strong> El NFAI fluctúa bruscamente día a día debido a la cobertura nubosa y los parches dispersos, lo que causaba predicciones inestables cuando se intentaba modelar como una variable continua pura.</li>
+</ul>
+<hr />
+<h2>2. La Evolución (Versión 2): Del Índice Abstracto a la Probabilidad de Arribazón</h2>
+<p>Comprendiendo que necesitábamos una herramienta útil para la toma de decisiones, decidimos rediseñar el modelo en la <strong>Versión 2</strong>, cambiando la perspectiva metodológica.</p>
+<h3>El Giro de la Versión 2: Regresión Logística</h3>
+<p>En lugar de predecir el valor exacto del índice NFAI, decidimos predecir la <strong>probabilidad de que ocurra un evento de arribazón (bloom_event)</strong>.</p>
+<p>Definimos matemáticamente un "evento de arribazón" como aquellos días en los que el porcentaje de cobertura de sargazo en la región de estudio supera el <strong>percentil 80 (P80)</strong> del registro histórico (lo que representa aproximadamente el $20\%$ de los días con mayor volumen de sargazo).</p>
+<p>Al transformar el problema de una regresión continua a una <strong>clasificación binaria</strong> ($1 = \text{Arribazón}$, $0 = \text{Día Normal}$), pudimos utilizar un modelo de <strong>Regresión Logística (Logit)</strong>. Esto nos permite entregar al usuario final una <strong>probabilidad de riesgo (de 0% a 100%)</strong>, la cual se traduce de inmediato en un sistema de semáforo de alerta temprana:</p>
+<p style="color: #666; font-style: italic;">[Diagrama de Flujo del Proceso]</p><h3>Expansión de Variables y Tratamiento de la Colinealidad</h3>
+<p>Para robustecer el modelo, exploramos la incorporación de más variables físicas y químicas, controlando estrictamente la colinealidad (variables altamente correlacionadas que confunden al modelo):</p>
+<ul>
+  <li>  <strong>Nutrientes:</strong> El Nitrato ($\text{NO}_3$) y el Silicato ($\text{Si}$) mostraron una correlación de $>0.77$ con el Fosfato (PO<sub>4</sub>) y el Hierro ($\text{Fe}$) respectively. Para evitar redundancia, los excluimos y conservamos únicamente el <strong>Fosfato (PO<sub>4</sub>)</strong> y el <strong>Hierro ($\text{Fe}$)</strong> como indicadores de fertilización.</li>
+  <li>  <strong>Física Marina:</strong> Añadimos la <strong>Salinidad</strong> (que influye en la flotabilidad y densidad del agua) y la componente meridional de las corrientes (<strong>V<sub>o</sub></strong>, componente norte-sur), completando el vector de transporte junto a la corriente zonal (U<sub>o</sub>).</li>
+</ul>
+<p>El nuevo modelo utiliza 6 variables independientes estandarizadas mediante puntuación $Z$:</p>
+<p class="equation">z = -2.5971 + 0.2104 &bull; sst_anom<sub>scaled</sub> + 2.1191 &bull; salinity<sub>scaled</sub> - 1.6533 &bull; po4<sub>scaled</sub> + 0.4811 &bull; fe<sub>scaled</sub> + 1.5275 &bull; uo<sub>scaled</sub> + 0.3909 &bull; vo<sub>scaled</sub></p>
+<p class="equation">Probabilidad de Arribazón (p) = 1 / (1 + e<sup>-z</sup>)</p>
+<p>Este nuevo enfoque probabilístico logró un rendimiento sobresaliente, alcanzando un <strong>AUC-ROC de $0.901$</strong> en la fase de validación, lo que demuestra una alta capacidad para discriminar días normales de verdaderos eventos de arribazón masiva.</p>
+<hr />
+<h2>3. Decisiones de Diseño Científico y Solución de Errores Críticos</h2>
+<p>Durante la construcción del pipeline de datos, nos topamos con obstáculos técnicos que requirieron decisiones de diseño clave para la tesis:</p>
+<h3>El Error del Flag de Calidad NFAI (Un "Bug" Científico)</h3>
+<p>Al procesar las imágenes satelitales diarias de CMEMS, notamos que el sargazo parecía "desaparecer" por completo de los DataFrames tras la decodificación. Al investigar a fondo los metadatos de los archivos NetCDF, descubrimos una anomalía en la definición de la máscara de calidad:</p>
+<p>El valor asignado por el satélite para una "observación válida de sargazo" era `32767`, pero este valor coincidía exactamente con el `_FillValue` (valor reservado para representar datos nulos o faltantes). Las librerías estándar de Python (`xarray` y `netCDF4`) reemplazaban automáticamente el valor `32767` por un `NaN` al abrir el dataset.</p>
+<ul>
+  <li>  <strong>Solución:</strong> Modificamos el pipeline de carga para abrir los archivos crudos usando `mask_and_scale=False`. Esto deshabilitó la conversión automática de nulos, permitiéndonos recuperar el flag original `32767` y medir correctamente el sargazo sin pérdidas de información.</li>
+</ul>
+<h3>Por Qué Normalizar (StandardScaler)</h3>
+<p>Las variables oceanográficas se miden en escalas completamente diferentes: el hierro se mide en fracciones microscópicas de milimoles ($\sim 0.001$), mientras que la salinidad ronda los $36$ gramos por litro. Si entrenamos una regresión logística con estos valores directamente, el modelo le daría un peso desproporcionado a las variables con magnitudes numéricas grandes (como la salinidad) e ignoraría a las pequeñas (como el hierro), independientemente de su importancia biológica real.</p>
+<p>Estandarizar los datos restándoles su media y dividiéndolos por su desviación estándar asegura que todas las variables jueguen en igualdad de condiciones en el modelo.</p>
+<hr />
+<h2>4. Arquitectura y Funcionamiento del Ecosistema Sargazord</h2>
+<p>El proyecto no es solo un modelo teórico en un Jupyter Notebook; es una plataforma de software integrada que consta de tres capas principales:</p>
+<p style="color: #666; font-style: italic;">[Diagrama de Flujo del Proceso]</p><h3>Capa 1: Captura de Datos y Predicción en Vivo (Python)</h3>
+<p>El script <strong>fetch_live_data.py</strong> actúa como el recolector de datos del sistema. Una vez al mes, realiza peticiones automáticas a las APIs de NOAA (para obtener anomalías térmicas) y a Open-Meteo (para obtener salinidad y velocidad/dirección de corrientes).</p>
+<p>Calcula las componentes zonales y meridionales del viento y corriente, aplica los parámetros de normalización y la fórmula logística, y guarda el nuevo punto en el historial del archivo <strong>model_data.json</strong>.</p>
+<h3>Capa 2: Almacenamiento de Datos Centralizado (`model_data.json`)</h3>
+<p>El archivo JSON actúa como puente (API estática) entre Python y el Frontend. Contiene:</p>
+<ul>
+  <li>  Los coeficientes entrenados del modelo.</li>
+  <li>  Las estadísticas descriptivas (medias y desviaciones estándar) necesarias para la normalización.</li>
+  <li>  Las coordenadas geográficas y valores históricos de referencia para 13 playas dominicanas.</li>
+  <li>  El histórico de predicciones mensuales para graficar series de tiempo.</li>
+</ul>
+<h3>Capa 3: La Aplicación Web Interactiva (React / Vite)</h3>
+<p>Desarrollada con una estética oscura premium, la web proporciona al usuario dos pestañas operativas cruciales:</p>
+<p>1.  <strong>El Monitor de Riesgo Activo:</strong> Muestra un mapa de la costa este y sureste de la República Dominicana con marcadores en cada playa. Cada marcador se colorea dinámicamente según el nivel de probabilidad de arribazón calculado para esa fecha, permitiendo a las autoridades ver de un vistazo qué zonas están bajo alerta roja, amarilla o verde.</p>
+<p>2.  <strong>El Simulador de Escenarios:</strong> Esta es la herramienta de investigación. Permite a los científicos y usuarios manipular 6 deslizadores (sliders) correspondientes a cada variable. Al moverlos, la interfaz normaliza el valor ingresado y calcula al instante en el navegador la nueva probabilidad de arribazón. Esto ayuda a responder preguntas hipotéticas como: *“Si la temperatura del mar sube 0.5°C y el fosfato aumenta por fertilizantes de ríos, ¿cuánto subirá el riesgo de arribazón en playa Macao?”*</p>
+<hr />
+<h2>Conclusión: El Valor de la Predicción en el Mundo Real</h2>
+<p>El paso de la <strong>Versión 1</strong> a la <strong>Versión 2</strong> del proyecto Sargazord representa el paso de un modelo puramente teórico a un <strong>sistema de toma de decisiones operativo</strong>. Al cambiar el enfoque de predecir un índice de reflectancia satelital a predecir la probabilidad matemática de una catástrofe de arribazón, el proyecto se convirtió en una herramienta real de alerta temprana.</p>
+<p>La integración de scripts automatizados en Python y una interfaz web interactiva en React demuestra cómo la ciencia de datos aplicada a la oceanografía puede aportar soluciones tangibles para la resiliencia climática y la protección ecológica de las costas de la República Dominicana.</p>
+
+</body>
+</html>

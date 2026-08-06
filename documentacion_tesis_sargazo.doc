@@ -68,35 +68,11 @@
 <p>Ante esta crisis, la pregunta fundamental que inspiró este proyecto fue: <strong>¿Cómo podemos adelantarnos a la llegada del sargazo para que las brigadas de limpieza y los sistemas de barreras flotantes puedan actuar de manera preventiva y no reactiva?</strong></p>
 <p>Para responder a esto, nació <strong>Sargazord</strong>: un ecosistema tecnológico que integra datos satelitales, variables oceanográficas en tiempo real y modelos de aprendizaje automático para predecir el nivel de riesgo de arribazón en las costas dominicanas.</p>
 <hr />
-<h2>1. El Origen (Versión 1): El Índice NFAI y la Regresión Lineal</h2>
+<h2>1. El Modelo de Predicción: Probabilidad de Arribazón</h2>
 <p>El proyecto comenzó con una hipótesis simple: <strong>El crecimiento y transporte del sargazo están dictados por las condiciones del océano</strong>.</p>
-<h3>El Qué y el Por Qué de la V1</h3>
-<p>Para cuantificar la presencia de sargazo desde el espacio, utilizamos el <strong>NFAI</strong> (*Normalized Floating Algae Index*), un índice espectral derivado de sensores satelitales que detecta la firma de reflectancia de la vegetación flotante. Recopilamos datos históricos del servicio de monitoreo marino de la Unión Europea (<strong>CMEMS</strong>) junto con tres variables que la literatura científica señalaba como los principales motores del fenómeno:</p>
-<p>1.  <strong>Fosfato (PO<sub>4</sub>):</strong> El nutriente limitante que actúa como fertilizante del alga.</p>
-<p>2.  <strong>Anomalía de la Temperatura Superficial del Mar (SST Anomalía):</strong> Un aumento en la temperatura acelera el metabolismo y la duplicación del sargazo.</p>
-<p>3.  <strong>Corriente Marina Zonal (U<sub>o</sub>):</strong> La componente de velocidad este-oeste que transporta físicamente el sargazo hacia nuestras costas.</p>
-<p>Con estos datos, entrenamos un modelo de <strong>Regresión Lineal Ordinaria (OLS)</strong>, cuya ecuación resultante fue:</p>
-<p class="equation">NFAI = -0.5436 + 4.9590 &bull; PO<sub>4</sub> + 0.1477 &bull; U<sub>o</sub> + 0.0642 &bull; SST Anomalía</p>
-<h3>Ajuste del Modelo OLS: Predicho vs. Observado</h3>
-<p>Para evaluar la precisión de la <strong>Versión 1</strong>, comparamos directamente los valores del índice NFAI predichos por la ecuación lineal frente a los valores reales observados por el satélite.</p>
-<p>El modelo OLS alcanzó una significancia estadística moderada con un coeficiente de determinación <strong>R<sup>2</sup> = 0.461</strong> (y un R<sup>2</sup> ajustado = 0.458). Esto nos indica que las variaciones en el fosfato, las corrientes zonales y la temperatura superficial explican aproximadamente el <strong>46.1% de la variabilidad histórica del sargazo</strong> en la zona.</p>
-<p>Sin embargo, al graficar el ajuste de <strong>Predicho vs. Observado</strong>, observamos deficiencias estructurales críticas:</p>
-<ul>
-  <li><strong>Subestimación de Picos Extremos:</strong> Durante los eventos de máxima arribazón (blooms masivos), los valores reales de NFAI se disparaban de forma exponencial debido al rápido crecimiento biológico del alga. Al ser un modelo estrictamente lineal, el OLS no pudo capturar este comportamiento exponencial, subestimando gravemente los picos de mayor riesgo (el modelo predecía un aumento moderado de NFAI mientras que la costa se inundaba de sargazo).</li>
-  <li><strong>Predicciones Negativas Absurdas:</strong> En temporadas frías o de bajos nutrientes, el NFAI observado se mantenía en un nivel plano cercano a cero. La naturaleza lineal del modelo forzaba la predicción a valores negativos abstractos e inexistentes en la realidad física, creando confusión en la lectura del índice.</li>
-  <li><strong>Distribución de Residuos:</strong> Los residuos (diferencia entre el valor real y el predicho) no seguían una distribución homogénea (heterocedasticidad), concentrándose en los extremos de nulo sargazo o arribazón extrema, evidenciando que la relación real entre el océano y el sargazo no es lineal.</li>
-</ul>
-<h3>La Lección Aprendida</h3>
-<p>Aunque el modelo lineal arrojó una significancia estadística aceptable ($R^2 = 0.461$), nos enfrentamos a un problema práctico de comunicación científica en el mundo real:</p>
-<ul>
-  <li>  <strong>Dificultad de interpretación:</strong> Para un hotelero, un pescador o un tomador de decisiones del gobierno, que el modelo prediga un "NFAI de $-0.485$" no significa nada. Es un índice abstracto, ruidoso y difícil de traducir en decisiones operativas (¿Debo desplegar las redes hoy o no?).</li>
-  <li>  <strong>Ruido diario y escala temporal:</strong> El NFAI fluctúa bruscamente día a día debido a la cobertura nubosa y los parches dispersos, lo que causaba predicciones inestables cuando se intentaba modelar como una variable continua pura.</li>
-</ul>
-<hr />
-<h2>2. La Evolución (Versión 2): Del Índice Abstracto a la Probabilidad de Arribazón</h2>
-<p>Comprendiendo que necesitábamos una herramienta útil para la toma de decisiones, decidimos rediseñar el modelo en la <strong>Versión 2</strong>, cambiando la perspectiva metodológica.</p>
-<h3>El Giro de la Versión 2: Regresión Logística</h3>
-<p>En lugar de predecir el valor exacto del índice NFAI, decidimos predecir la <strong>probabilidad de que ocurra un evento de arribazón (bloom_event)</strong>.</p>
+<p>Para construir una herramienta útil para la toma de decisiones, decidimos predecir la <strong>probabilidad de que ocurra un evento de arribazón (bloom_event)</strong> en la costa dominicana.</p>
+<h3>El Modelo: Regresión Logística (Logit)</h3>
+<p>En lugar de intentar predecir un índice de reflectancia continuo y abstracto (como el NFAI de la V1), decidimos predecir la probabilidad directa de arribazón de sargazo.</p>
 <p>Definimos matemáticamente un "evento de arribazón" como aquellos días en los que el porcentaje de cobertura de sargazo en la región de estudio supera el <strong>percentil 80 (P80)</strong> del registro histórico (lo que representa aproximadamente el $20\%$ de los días con mayor volumen de sargazo).</p>
 <p>Al transformar el problema de una regresión continua a una <strong>clasificación binaria</strong> ($1 = \text{Arribazón}$, $0 = \text{Día Normal}$), pudimos utilizar un modelo de <strong>Regresión Logística (Logit)</strong>. Esto nos permite entregar al usuario final una <strong>probabilidad de riesgo (de 0% a 100%)</strong>, la cual se traduce de inmediato en un sistema de semáforo de alerta temprana:</p>
 <p style="color: #666; font-style: italic;">[Diagrama de Flujo del Proceso]</p><h3>Expansión de Variables y Tratamiento de la Colinealidad</h3>
@@ -106,9 +82,9 @@
   <li>  <strong>Física Marina:</strong> Añadimos la <strong>Salinidad</strong> (que influye en la flotabilidad y densidad del agua) y la componente meridional de las corrientes (<strong>V<sub>o</sub></strong>, componente norte-sur), completando el vector de transporte junto a la corriente zonal (U<sub>o</sub>).</li>
 </ul>
 <p>El nuevo modelo utiliza 6 variables independientes estandarizadas mediante puntuación $Z$:</p>
-<p class="equation">z = -2.5971 + 0.2104 &bull; sst_anom<sub>scaled</sub> + 2.1191 &bull; salinity<sub>scaled</sub> - 1.6533 &bull; po4<sub>scaled</sub> + 0.4811 &bull; fe<sub>scaled</sub> + 1.5275 &bull; uo<sub>scaled</sub> + 0.3909 &bull; vo<sub>scaled</sub></p>
+<p class="equation">z = -2.2470 + 0.2751 &bull; sst_anom<sub>scaled</sub> + 2.3539 &bull; salinity<sub>scaled</sub> - 1.5732 &bull; po4<sub>scaled</sub> + 0.5788 &bull; fe<sub>scaled</sub> + 1.7560 &bull; uo<sub>scaled</sub> + 0.5574 &bull; vo<sub>scaled</sub></p>
 <p class="equation">Probabilidad de Arribazón (p) = 1 / (1 + e<sup>-z</sup>)</p>
-<p>Este nuevo enfoque probabilístico logró un rendimiento sobresaliente, alcanzando un <strong>AUC-ROC de $0.901$</strong> en la fase de validación, lo que demuestra una alta capacidad para discriminar días normales de verdaderos eventos de arribazón masiva.</p>
+<p>Este nuevo enfoque probabilístico logró un rendimiento sobresaliente, alcanzando un <strong>AUC-ROC de $0.909$</strong> en la fase de validación, lo que demuestra una alta capacidad para discriminar días normales de verdaderos eventos de arribazón masiva.</p>
 <hr />
 <h2>3. Decisiones de Diseño Científico y Solución de Errores Críticos</h2>
 <p>Durante la construcción del pipeline de datos, nos topamos con obstáculos técnicos que requirieron decisiones de diseño clave para la tesis:</p>

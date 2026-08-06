@@ -12,44 +12,14 @@ Para responder a esto, nació **Sargazord**: un ecosistema tecnológico que inte
 
 ---
 
-## 1. El Origen (Versión 1): El Índice NFAI y la Regresión Lineal
+## 1. El Modelo de Predicción: Probabilidad de Arribazón
 
 El proyecto comenzó con una hipótesis simple: **El crecimiento y transporte del sargazo están dictados por las condiciones del océano**. 
 
-### El Qué y el Por Qué de la V1
-Para cuantificar la presencia de sargazo desde el espacio, utilizamos el **NFAI** (*Normalized Floating Algae Index*), un índice espectral derivado de sensores satelitales que detecta la firma de reflectancia de la vegetación flotante. Recopilamos datos históricos del servicio de monitoreo marino de la Unión Europea (**CMEMS**) junto con tres variables que la literatura científica señalaba como los principales motores del fenómeno:
-1.  **Fosfato ($\text{PO}_4$):** El nutriente limitante que actúa como fertilizante del alga.
-2.  **Anomalía de la Temperatura Superficial del Mar ($\text{SST\_anomalía}$):** Un aumento en la temperatura acelera el metabolismo y la duplicación del sargazo.
-3.  **Corriente Marina Zonal ($U_o$):** La componente de velocidad este-oeste que transporta físicamente el sargazo hacia nuestras costas.
+Para construir una herramienta útil para la toma de decisiones, decidimos predecir la **probabilidad de que ocurra un evento de arribazón (bloom_event)** en la costa dominicana.
 
-Con estos datos, entrenamos un modelo de **Regresión Lineal Ordinaria (OLS)**, cuya ecuación resultante fue:
-
-$$NFAI = -0.5436 + 4.9590 \cdot \text{PO}_4 + 0.1477 \cdot U_o + 0.0642 \cdot \text{SST\_anomalía}$$
-
-### Ajuste del Modelo OLS: Predicho vs. Observado
-
-Para evaluar la precisión de la **Versión 1**, comparamos directamente los valores del índice NFAI predichos por la ecuación lineal frente a los valores reales observados por el satélite. 
-
-El modelo OLS alcanzó una significancia estadística moderada con un coeficiente de determinación **$R^2 = 0.461$** (y un $R^2 \text{ ajustado} = 0.458$). Esto nos indica que las variaciones en el fosfato, las corrientes zonales y la temperatura superficial explican aproximadamente el **$46.1\%$ de la variabilidad histórica del sargazo** en la zona. 
-
-Sin embargo, al graficar el ajuste de **Predicho vs. Observado**, observamos deficiencias estructurales críticas:
-*   **Subestimación de Picos Extremos:** Durante los eventos de máxima arribazón (blooms masivos), los valores reales de NFAI se disparaban de forma exponencial debido al rápido crecimiento biológico del alga. Al ser un modelo estrictamente lineal, el OLS no pudo capturar este comportamiento exponencial, subestimando gravemente los picos de mayor riesgo (el modelo predecía un aumento moderado de NFAI mientras que la costa se inundaba de sargazo).
-*   **Predicciones Negativas Absurdas:** En temporadas frías o de bajos nutrientes, el NFAI observado se mantenía en un nivel plano cercano a cero. La naturaleza lineal del modelo forzaba la predicción a valores negativos abstractos e inexistentes en la realidad física, creando confusión en la lectura del índice.
-*   **Distribución de Residuos:** Los residuos (diferencia entre el valor real y el predicho) no seguían una distribución homogénea (heterocedasticidad), concentrándose en los extremos de nulo sargazo o arribazón extrema, evidenciando que la relación real entre el océano y el sargazo no es lineal.
-
-### La Lección Aprendida
-Aunque el modelo lineal arrojó una significancia estadística aceptable ($R^2 = 0.461$), nos enfrentamos a un problema práctico de comunicación científica en el mundo real: 
-*   **Dificultad de interpretación:** Para un hotelero, un pescador o un tomador de decisiones del gobierno, que el modelo prediga un "NFAI de $-0.485$" no significa nada. Es un índice abstracto, ruidoso y difícil de traducir en decisiones operativas (¿Debo desplegar las redes hoy o no?).
-*   **Ruido diario y escala temporal:** El NFAI fluctúa bruscamente día a día debido a la cobertura nubosa y los parches dispersos, lo que causaba predicciones inestables cuando se intentaba modelar como una variable continua pura.
-
----
-
-## 2. La Evolución (Versión 2): Del Índice Abstracto a la Probabilidad de Arribazón
-
-Comprendiendo que necesitábamos una herramienta útil para la toma de decisiones, decidimos rediseñar el modelo en la **Versión 2**, cambiando la perspectiva metodológica.
-
-### El Giro de la Versión 2: Regresión Logística
-En lugar de predecir el valor exacto del índice NFAI, decidimos predecir la **probabilidad de que ocurra un evento de arribazón (bloom_event)**. 
+### El Modelo: Regresión Logística (Logit)
+En lugar de intentar predecir un índice de reflectancia continuo y abstracto (como el NFAI de la V1), decidimos predecir la probabilidad directa de arribazón de sargazo.
 
 Definimos matemáticamente un "evento de arribazón" como aquellos días en los que el porcentaje de cobertura de sargazo en la región de estudio supera el **percentil 80 (P80)** del registro histórico (lo que representa aproximadamente el $20\%$ de los días con mayor volumen de sargazo).
 
@@ -72,11 +42,11 @@ Para robustecer el modelo, exploramos la incorporación de más variables físic
 
 El nuevo modelo utiliza 6 variables independientes estandarizadas mediante puntuación $Z$:
 
-$$z = -2.5971 + 0.2104 \cdot \text{sst\_anom}_{\text{scaled}} + 2.1191 \cdot \text{salinidad}_{\text{scaled}} - 1.6533 \cdot \text{po4}_{\text{scaled}} + 0.4811 \cdot \text{fe}_{\text{scaled}} + 1.5275 \cdot \text{uo}_{\text{scaled}} + 0.3909 \cdot \text{vo}_{\text{scaled}}$$
+$$z = -2.2470 + 0.2751 \cdot \text{sst\_anom}_{\text{scaled}} + 2.3539 \cdot \text{salinidad}_{\text{scaled}} - 1.5732 \cdot \text{po4}_{\text{scaled}} + 0.5788 \cdot \text{fe}_{\text{scaled}} + 1.7560 \cdot \text{uo}_{\text{scaled}} + 0.5574 \cdot \text{vo}_{\text{scaled}}$$
 
 $$\text{Probabilidad de Arribazón} (p) = \frac{1}{1 + e^{-z}}$$
 
-Este nuevo enfoque probabilístico logró un rendimiento sobresaliente, alcanzando un **AUC-ROC de $0.901$** en la fase de validación, lo que demuestra una alta capacidad para discriminar días normales de verdaderos eventos de arribazón masiva.
+Este nuevo enfoque probabilístico logró un rendimiento sobresaliente, alcanzando un **AUC-ROC de $0.909$** en la fase de validación, lo que demuestra una alta capacidad para discriminar días normales de verdaderos eventos de arribazón masiva.
 
 ---
 

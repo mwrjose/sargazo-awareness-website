@@ -19,13 +19,13 @@ NEW_STATS = {
 
 # Coeficientes del nuevo modelo Logit (V2)
 NEW_MODEL = {
-    "const": -2.5971,
-    "sst_anomaly": 0.2104,
-    "salinity": 2.1191,
-    "po4": -1.6533,
-    "fe": 0.4811,
-    "uo": 1.5275,
-    "vo": 0.3909
+    "const": -2.2470,
+    "sst_anomaly": 0.2751,
+    "salinity": 2.3539,
+    "po4": -1.5732,
+    "fe": 0.5788,
+    "uo": 1.7560,
+    "vo": 0.5574
 }
 
 # Límites de probabilidad del semáforo

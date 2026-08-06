@@ -1,12 +1,12 @@
 {
   "model": {
-    "const": -2.5971,
-    "sst_anomaly": 0.2104,
-    "salinity": 2.1191,
-    "po4": -1.6533,
-    "fe": 0.4811,
-    "uo": 1.5275,
-    "vo": 0.3909
+    "const": -2.2470,
+    "sst_anomaly": 0.2751,
+    "salinity": 2.3539,
+    "po4": -1.5732,
+    "fe": 0.5788,
+    "uo": 1.7560,
+    "vo": 0.5574
   },
   "feature_stats": {
     "sst_anomaly": {
@@ -57,12 +57,12 @@
     "p80": 0.6
   },
   "metrics": {
-    "r2": 0.901,
-    "r2_adj": 0.3902,
+    "r2": 0.909,
+    "r2_adj": 0.4224,
     "n_obs": 529,
-    "mae_modelo": -161.58,
+    "mae_modelo": -171.65,
     "mejora_pct": 21.6,
-    "f_stat": 6.699e-42
+    "f_stat": 2.389e-51
   },
   "playas": {
     "Punta Cana": {

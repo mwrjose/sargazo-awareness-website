@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Guía de Inclusión de Código en la Tesis</title>
+  <style>
+    body {
+      font-family: 'Calibri', 'Arial', sans-serif;
+      line-height: 1.6;
+      color: #333333;
+      margin: 40px;
+    }
+    h1 {
+      font-family: 'Garamond', 'Georgia', serif;
+      color: #1B365D;
+      font-size: 24pt;
+      border-bottom: 2px solid #1B365D;
+      padding-bottom: 5px;
+      margin-top: 30px;
+    }
+    h2 {
+      font-family: 'Garamond', 'Georgia', serif;
+      color: #2C5E8A;
+      font-size: 16pt;
+      margin-top: 25px;
+      border-bottom: 1px solid #E5E5E5;
+      padding-bottom: 3px;
+    }
+    h3 {
+      font-family: 'Calibri', 'Arial', sans-serif;
+      color: #1B365D;
+      font-size: 13pt;
+      margin-top: 20px;
+    }
+    p {
+      font-size: 11pt;
+      margin-bottom: 12px;
+      text-align: justify;
+    }
+    ul, ol {
+      font-size: 11pt;
+      margin-bottom: 15px;
+      padding-left: 20px;
+    }
+    li {
+      margin-bottom: 6px;
+    }
+    .code-box {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 9.5pt;
+      background-color: #F4F6F9;
+      border: 1px solid #D1D5DB;
+      padding: 15px;
+      margin: 15px 0;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      color: #232323;
+    }
+    .equation {
+      font-family: 'Cambria Math', 'Georgia', serif;
+      font-style: italic;
+      font-size: 12pt;
+      text-align: center;
+      background-color: #F9FAFB;
+      border-left: 3px solid #2C5E8A;
+      padding: 10px;
+      margin: 15px 0;
+    }
+    .footnote {
+      font-size: 9pt;
+      color: #666666;
+      border-top: 1px solid #CCCCCC;
+      padding-top: 5px;
+      margin-top: 30px;
+    }
+    .highlight {
+      background-color: #FFF9E6;
+      font-weight: bold;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Manual de Integración: Código, Algoritmos y Fórmulas del Modelo Predictivo en la Tesis</h1>
+  
+  <p>Este documento sirve como guía metodológica y repositorio de fragmentos de código listos para incorporar en el cuerpo académico de tu tesis de grado o postgrado. La inclusión de la lógica de programación y la matemática formal añade un estándar de <strong>reproducibilidad científica</strong>, dotando al documento de un alto grado de rigor y profesionalidad.</p>
+
+  <h2>1. Directrices Académicas de Presentación</h2>
+  <p>Para asegurar que los evaluadores y lectores de la tesis interpreten el desarrollo de software como una contribución científica y no como mero relleno, se deben seguir las siguientes mejores prácticas de maquetación y redacción:</p>
+  <ul>
+    <li><strong>El Principio de la Lógica Clave:</strong> No se deben incluir scripts enteros de automatización o configuración en los capítulos principales. El cuerpo de la tesis (Capítulo de Metodología o Desarrollo) debe contener únicamente la lógica abstracta del entrenamiento y predicción del modelo.</li>
+    <li><strong>Ubicación de Código Completo:</strong> Los archivos de código completos (como scripts para consulta automática de APIs climáticas o limpieza de imágenes satelitales) deben incluirse en los <strong>Apéndices o Anexos</strong> al final del documento.</li>
+    <li><strong>Fórmulas Primero, Código Después:</strong> Todo bloque de código que implemente una operación matemática (como la normalización Z-score o la función sigmoide) debe ser precedido por la explicación e introducción de su fórmula matemática formal.</li>
+    <li><strong>Uso de Repositorios Públicos:</strong> Es sumamente profesional incluir una nota al pie de página o un enlace destacado al repositorio del proyecto (por ejemplo, en GitHub), permitiendo a los sinodales auditar el historial de desarrollo de la plataforma web.</li>
+  </ul>
+
+  <hr />
+
+  <h2>2. Ecuaciones Matemáticas del Modelo Predictivo</h2>
+  <p>Antes de exponer la programación, debes definir la matemática del modelo Logit. A continuación se presentan las ecuaciones formateadas tal y como deben lucir en tu procesador de textos:</p>
+
+  <h3>A. Estandarización de Variables (Z-Score)</h3>
+  <p>Dado que las variables oceanográficas poseen escalas y dimensiones físicas dispares, cada valor crudo $x$ es normalizado en base a la media histórica $\mu$ y la desviación estándar $\sigma$ de la variable:</p>
+  <div class="equation">
+    x_scaled = (x - &mu;) / &sigma;
+  </div>
+
+  <h3>B. Ecuación del Score Logístico ($z$)</h3>
+  <p>El score lineal $z$ del nuevo modelo ajustado con partición de datos 75-25 se define como:</p>
+  <div class="equation">
+    z = -2.2470 + 0.2751 &bull; sst_anomaly_scaled + 2.3539 &bull; salinity_scaled - 1.5732 &bull; po4_scaled + 0.5788 &bull; fe_scaled + 1.7560 &bull; uo_scaled + 0.5574 &bull; vo_scaled
+  </div>
+
+  <h3>C. Función Probabilística Sigmoide ($p$)</h3>
+  <p>Para proyectar el score continuo en un rango de probabilidad cerrado de $[0, 1]$ (de 0% a 100% de riesgo de arribazón), se aplica la función sigmoide:</p>
+  <div class="equation">
+    p = 1 / (1 + e<sup>-z</sup>)
+  </div>
+
+  <hr />
+
+  <h2>3. Fragmentos de Código Sugeridos para la Metodología</h2>
+  <p>Los siguientes fragmentos están escritos en Python y documentados con comentarios académicos. Puedes copiarlos directamente en los cuadros de código de tu capítulo metodológico:</p>
+
+  <h3>Algoritmo 3.1: Procesamiento de Datos y Ajuste del Modelo Logístico</h3>
+  <p>Muestra cómo se cargan las variables desde la matriz NetCDF satelital, se dividen en conjuntos de entrenamiento/prueba (75-25), se estandarizan numéricamente y se calcula la regresión logística:</p>
+
+  <div class="code-box">
+# Algoritmo de Carga, Estandarización y Ajuste del Modelo Predictivo (Logit v2)
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+# 1. Carga del conjunto de datos históricos consolidados
+df = pd.read_csv("historico_sargazo_variables.csv")
+features = ["sst_anomaly", "salinity", "po4", "fe", "uo", "vo"]
+X = df[features]
+y = df["bloom_event"]  # Variable binaria (1 = Arribazón, 0 = Normal)
+
+# 2. División de datos en conjunto de Entrenamiento (75%) y Prueba (25%)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.25, random_state=42, stratify=y
+)
+
+# 3. Estandarización Z-score de variables independientes
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+# Guardar medias y desviaciones estándar para la estandarización en tiempo real
+feature_stats = {
+    feature: {"mean": scaler.mean_[i], "std": scaler.scale_[i]}
+    for i, feature in enumerate(features)
+}
+
+# 4. Ajuste del modelo de Regresión Logística mediante Máxima Verosimilitud (MLE)
+X_train_const = sm.add_constant(X_train_scaled)
+logit_model = sm.Logit(y_train, X_train_const).fit()
+
+# Mostrar resumen estadístico (Coeficientes, P-values, Pseudo R2)
+print(logit_model.summary())
+  </div>
+
+  <h3>Algoritmo 3.2: Función de Predicción Probabilística en Tiempo Real</h3>
+  <p>Este bloque describe el método computacional implementado para recibir las variables ambientales del día, normalizarlas con las estadísticas históricas fijas del modelo, y calcular la probabilidad matemática de arribazón:</p>
+
+  <div class="code-box">
+# Función Operativa de Inferencia de Riesgo
+import math
+
+def predecir_arribazon_sargazo(datos_dia, coeficientes, stats):
+    """
+    Calcula la probabilidad de arribazón en base a datos climatológicos crudos.
+    
+    Parámetros:
+    - datos_dia: dict con valores crudos del día {sst_anomaly, salinity, po4, fe, uo, vo}
+    - coeficientes: dict con pesos del modelo entrenado
+    - stats: dict con medias y desviaciones estándar históricas del StandardScaler
+    """
+    # 1. Estandarización Z-score individual de cada variable oceanográfica
+    scaled = {}
+    for var in ['sst_anomaly', 'salinity', 'po4', 'fe', 'uo', 'vo']:
+        scaled[var] = (datos_dia[var] - stats[var]['mean']) / stats[var]['std']
+        
+    # 2. Cálculo de la combinación lineal (Score z)
+    z = (coeficientes['const'] + 
+         coeficientes['sst_anomaly'] * scaled['sst_anomaly'] +
+         coeficientes['salinity'] * scaled['salinity'] +
+         coeficientes['po4'] * scaled['po4'] +
+         coeficientes['fe'] * scaled['fe'] +
+         coeficientes['uo'] * scaled['uo'] +
+         coeficientes['vo'] * scaled['vo'])
+         
+    # 3. Mapeo a la función de enlace Sigmoide
+    probabilidad = 1.0 / (1.0 + math.exp(-z))
+    
+    return probabilidad
+  </div>
+
+  <hr />
+
+  <h2>4. Justificación de Herramientas de Software y Librerías Científicas</h2>
+  <p>Es indispensable justificar en tu marco tecnológico las herramientas elegidas para el procesamiento. Puedes utilizar la siguiente redacción técnica:</p>
+  <ul>
+    <li><strong>Statsmodels (Python):</strong> Elegida como la librería central de modelado debido a su enfoque rigurosamente estadístico. A diferencia de enfoques puramente predictivos, proporciona un análisis completo de inferencia, reportando intervalos de confianza, errores estándar y p-values detallados para evaluar la significancia individual de cada variable oceanográfica.</li>
+    <li><strong>Scikit-Learn (Python):</strong> Utilizada para realizar el particionamiento de datos (validación cruzada mediante división train/test) y para el escalamiento de características (StandardScaler), garantizando que el modelo sea evaluado con datos no vistos durante el entrenamiento para evitar el sobreajuste (*overfitting*).</li>
+    <li><strong>Xarray y NetCDF4 (Python):</strong> Herramientas líderes en la investigación geocientífica que permiten abrir, manipular y extraer datos multidimensionales provenientes de satélites y modelos hidrodinámicos globales.</li>
+  </ul>
+
+  <div class="footnote">
+    <p>Manual generado automáticamente para la tesis académica: <em>"Sargazord: Monitoreo y Simulación de Arribazón de Sargazo mediante Variables Oceanográficas en la República Dominicana"</em>. 2026.</p>
+  </div>
+
+</body>
+</html>

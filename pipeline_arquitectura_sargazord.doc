@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Pipeline de Arquitectura en 3 Capas</title>
+  <style>
+    body {
+      font-family: 'Calibri', 'Arial', sans-serif;
+      line-height: 1.6;
+      color: #333333;
+      margin: 40px;
+    }
+    h1 {
+      font-family: 'Garamond', 'Georgia', serif;
+      color: #1B365D;
+      font-size: 24pt;
+      border-bottom: 2px solid #1B365D;
+      padding-bottom: 5px;
+      margin-top: 30px;
+    }
+    h2 {
+      font-family: 'Garamond', 'Georgia', serif;
+      color: #2C5E8A;
+      font-size: 16pt;
+      margin-top: 25px;
+      border-bottom: 1px solid #E5E5E5;
+      padding-bottom: 3px;
+    }
+    h3 {
+      font-family: 'Calibri', 'Arial', sans-serif;
+      color: #1B365D;
+      font-size: 13pt;
+      margin-top: 20px;
+    }
+    p {
+      font-size: 11pt;
+      margin-bottom: 12px;
+      text-align: justify;
+    }
+    ul, ol {
+      font-size: 11pt;
+      margin-bottom: 15px;
+      padding-left: 20px;
+    }
+    li {
+      margin-bottom: 6px;
+    }
+    .equation {
+      font-family: 'Cambria Math', 'Georgia', serif;
+      font-style: italic;
+      font-size: 12pt;
+      text-align: center;
+      background-color: #F9FAFB;
+      border-left: 3px solid #2C5E8A;
+      padding: 10px;
+      margin: 15px 0;
+    }
+    .footnote {
+      font-size: 9pt;
+      color: #666666;
+      border-top: 1px solid #CCCCCC;
+      padding-top: 5px;
+      margin-top: 30px;
+    }
+    .flowchart-desc {
+      background-color: #F4F6F9;
+      border: 1px solid #D1D5DB;
+      padding: 15px;
+      margin: 15px 0;
+      font-size: 10pt;
+    }
+    .flowchart-step {
+      margin-bottom: 10px;
+      padding-left: 15px;
+      border-left: 3px solid #1B365D;
+    }
+    .step-title {
+      font-weight: bold;
+      color: #1B365D;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Especificación Técnica: Arquitectura en 3 Capas y Pipeline de Datos (Sargazord)</h1>
+  
+  <p>La plataforma tecnológica <strong>Sargazord</strong> ha sido diseñada e implementada bajo una arquitectura desacoplada de tres capas (3-tier architecture). Este diseño metodológico permite separar las tareas de cómputo geoespacial e inferencia estadística (procesadas de manera asíncrona mediante Python) de la lógica de presentación visual e interacción con el usuario (ejecutada localmente en el navegador a través de React y Vite). Un canal estático de transferencia de datos en formato JSON actúa como puente (Bridge Pattern) entre ambas plataformas.</p>
+
+  <h2>1. Capa 1: Captura e Inferencia (Backend en Python)</h2>
+  <p>Constituye el motor de cálculo matemático y climatológico del sistema. Sus funciones principales son:</p>
+  <ul>
+    <li><strong>Consumo de APIs Oceanográficas:</strong> Conectores programados en Python realizan solicitudes mensuales automáticas a los servidores globales de la Administración Nacional Oceánica y Atmosférica de EE. UU. (<strong>NOAA ERDDAP</strong>) y el servicio de meteorología marina de <strong>Open-Meteo</strong>. Se capturan las medias de los últimos 30 días de la región marina dominicana para las seis variables del modelo.</li>
+    <li><strong>Tratamiento Z-Score:</strong> Los datos crudos se estandarizan de inmediato restando la media histórica y dividiendo entre la desviación estándar guardada por el StandardScaler en la base de datos de calibración.</li>
+    <li><strong>Inferencia Logística:</strong> Se ejecuta la fórmula del modelo Logit para calcular la probabilidad de riesgo acumulada:</li>
+  </ul>
+  <div class="equation">
+    z = -2.2470 + 0.2751 &bull; sst_anom<sub>scaled</sub> + 2.3539 &bull; salinity<sub>scaled</sub> - 1.5732 &bull; po4<sub>scaled</sub> + 0.5788 &bull; fe<sub>scaled</sub> + 1.7560 &bull; uo<sub>scaled</sub> + 0.5574 &bull; vo<sub>scaled</sub>
+  </div>
+  <div class="equation">
+    Probabilidad de Arribazón (p) = 1 / (1 + e<sup>-z</sup>)
+  </div>
+
+  <h2>2. Capa 2: Puente de Datos (JSON Bridge)</h2>
+  <p>Actúa como la base de datos de acoplamiento del ecosistema. Consiste en el archivo plano e indexado <strong>model_data.json</strong>. Su adopción responde a una decisión de diseño de alto rendimiento:</p>
+  <ul>
+    <li><strong>Eliminación de Costos de Infraestructura Activa:</strong> Al no requerir un servidor de base de datos relacional encendido permanentemente, el sistema es 100% compatible con despliegues en servidores estáticos (Serverless).</li>
+    <li><strong>Contenido Optimizado:</strong> Almacena en un tamaño inferior a los 16 KB los coeficientes fijos de regresión, las estadísticas de estandarización Z-score de las variables, el histórico de biomasa mensual y las coordenadas de ubicación de las playas dominicanas monitoreadas.</li>
+    <li><strong>Velocidad de Carga:</strong> Al ser un archivo estático indexado, es descargado y cacheado directamente por el navegador en milisegundos durante la inicialización de la página web.</li>
+  </ul>
+
+  <h2>3. Capa 3: Presentación e Interactividad (Frontend React / Vite)</h2>
+  <p>Consiste en la aplicación de visualización pública interactiva. Se encarga de procesar los datos de cara al usuario:</p>
+  <ul>
+    <li><strong>Semáforo de Alerta Costera:</strong> Consume los datos y los proyecta sobre un mapa georreferenciado, coloreando los pines según el porcentaje de probabilidad (Verde para riesgo bajo &le; 30%, Amarillo para riesgo moderado entre 30% y 60%, y Rojo para riesgo alto &gt; 60%).</li>
+    <li><strong>Simulación Offline Dinámica:</strong> Cuando un usuario manipula los deslizadores (sliders) en la sección de simulación, la app no realiza llamadas HTTP de red. Los valores se capturan, se estandarizan en milisegundos con las estadísticas de la Capa 2 y se calcula la probabilidad aplicando el algoritmo sigmoide directamente en JavaScript en el navegador del cliente.</li>
+  </ul>
+
+  <hr />
+
+  <h2>4. Pipeline de Automatización y CI/CD (GitHub Actions & Netlify)</h2>
+  <p>El flujo de datos se actualiza automáticamente todos los domingos mediante un pipeline de integración y despliegue continuos sin intervención de operadores:</p>
+  
+  <div class="flowchart-desc">
+    <div class="flowchart-step">
+      <span class="step-title">Paso 1: Cron Trigger (GitHub Actions)</span><br />
+      Un cronjob automatizado dispara un contenedor virtual Linux en GitHub todos los domingos a las 00:00 UTC.
+    </div>
+    <div class="flowchart-step">
+      <span class="step-title">Paso 2: Ingesta y Cálculo Climático</span><br />
+      La máquina virtual de GitHub instala Python, ejecuta el script de ingesta, consulta las APIs de la NOAA/Copernicus, procesa los Z-scores y actualiza localmente el archivo <em>model_data.json</em>.
+    </div>
+    <div class="flowchart-step">
+      <span class="step-title">Paso 3: Git Commit y Push Automático</span><br />
+      La misma máquina virtual realiza un commit firmado y hace un <em>push</em> de vuelta a la rama principal (<em>main</em>) de tu repositorio remoto.
+    </div>
+    <div class="flowchart-step">
+      <span class="step-title">Paso 4: Despliegue en Caliente en Netlify</span><br />
+      Netlify detecta el cambio en GitHub mediante un webhook y recompila automáticamente la aplicación React. Los nuevos datos y predicciones quedan disponibles de inmediato en la web pública.
+    </div>
+  </div>
+
+  <div class="footnote">
+    <p>Documentación de Ingeniería de Software para la Tesis: <em>"Sargazord: Monitoreo y Simulación de Arribazón de Sargazo mediante Variables Oceanográficas en la República Dominicana"</em>. 2026.</p>
+  </div>
+
+</body>
+</html>
